@@ -14,18 +14,63 @@
 #include <string>
 #include <cstdlib>
 
-// g++ imgs2sifts_vl.cpp -I /Users/agorodilov/work/msr_image/vlfeat-0.9.16/ `pkg-config opencv --cflags --libs` /Users/agorodilov/work/msr_image/vlfeat-0.9.16/bin/maci64/libvl.dylib  -o imgs2sifts_vl
+#include <boost/tokenizer.hpp>
+#include <boost/algorithm/string.hpp>
 
-typedef struct
-{
-	int k1 ;
-	int k2 ;
-	double score ;
-} Pair ;
+using namespace std;
 
+// g++ -O2 imgs2sifts_vl.cpp -I /Users/agorodilov/work/msr_image/vlfeat-0.9.16/ `pkg-config opencv --cflags --libs` /Users/agorodilov/work/msr_image/vlfeat-0.9.16/bin/maci64/libvl.dylib  -o imgs2sifts_vl
+
+static const char base64_bkw[] =
+"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+"\0\0\0\0\0\0\0\0\0\0\0\76\0\76\0\77\64\65\66\67\70\71\72\73\74\75\0\0\0\0\0\0"
+"\0\0\1\2\3\4\5\6\7\10\11\12\13\14\15\16\17\20\21\22\23\24\25\26\27\30\31\0\0\0\0\77"
+"\0\32\33\34\35\36\37\40\41\42\43\44\45\46\47\50\51\52\53\54\55\56\57\60\61\62\63\0\0\0\0\0"
+"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+
+inline void uudecode_1(char *dst, unsigned char *src) {
+    dst[0] = char((base64_bkw[src[0]] << 2) | (base64_bkw[src[1]] >> 4));
+    dst[1] = char((base64_bkw[src[1]] << 4) | (base64_bkw[src[2]] >> 2));
+    dst[2] = char((base64_bkw[src[2]] << 6) | base64_bkw[src[3]]);
+}
+
+size_t Base64Decode(void* dst, const char* b, const char* e) {
+    size_t n = 0;
+
+    if ((e - b) % 4) {
+        throw std::logic_error("incorrect input length for base64 decode");
+    }
+
+    while (b < e) {
+        uudecode_1((char*)dst + n, (unsigned char*)b);
+
+        b += 4;
+        n += 3;
+    }
+
+    if (n > 0) {
+        if (b[-1] == ','  || b[-1] == '=') {
+            n--;
+
+            if (b[-2] == ',' || b[-2] == '=') {
+                n--;
+            }
+        }
+    }
+    return n;
+}
+
+void GetBinaryFromBase64(const std::string & str64, std::vector<char> & binData) {
+	binData.resize(str64.size());
+	size_t t = Base64Decode(&*binData.begin(), str64.c_str(), str64.c_str() + str64.size());
+	binData.resize(t);
+}
 
 VL_INLINE void
-	transpose_descriptor (vl_sift_pix* dst, vl_sift_pix* src)
+transpose_descriptor (vl_sift_pix* dst, vl_sift_pix* src)
 {
 	int const BO = 8 ;  /* number of orientation bins */
 	int const BP = 4 ;  /* number of spatial bins     */
@@ -43,64 +88,32 @@ VL_INLINE void
 	}
 }
 
-
-static int
-	korder (void const* a, void const* b) {
-		double x = ((double*) a) [2] - ((double*) b) [2] ;
-		if (x < 0) return -1 ;
-		if (x > 0) return +1 ;
-		return 0 ;
-}
-
-
-vl_bool
-	check_sorted (double const * keys, vl_size nkeys)
-{
-	vl_uindex k ;
-	for (k = 0 ; k + 1 < nkeys ; ++ k) {
-		if (korder(keys, keys + 4) > 0) {
-			return VL_FALSE ;
-		}
-		keys += 4 ;
-	}
-	return VL_TRUE ;
-}
-
-
-void VLSIFT(IplImage* image, vl_uint8* DATAdescr, double* DATAframes, int* nframes){
+void VLSIFT(cv::Mat* image, vl_uint8* DATAdescr, double* DATAframes, int* nframes, int verbose = 1){
 	//Take IplImage -> convert to SINGLE (float):
-	float* frame = (float*)malloc(image->height*image->width*sizeof(float));
-	uchar* Ldata      = (uchar *)image->imageData;
-	for(int i=0;i<image->height;i++)
-		for(int j=0;j<image->width;j++)
-			frame[j*image->height+i*image->nChannels] = (float)Ldata[i*image->widthStep+j*image->nChannels];
-	/*
-	FILE *fpp = fopen("c:\\Picture.txt", "w");
-		for(int p=0;p<image->height*image->width; p++){
-			fprintf(fpp, "%f\n",frame[p] );
-		}
-		fclose(fpp);
-		*/
+	float* frame = (float*)malloc(image->rows * image->cols * sizeof(float));
+	uchar* Ldata = (uchar *)image->data;
+
+	for(int i = 0; i < image->rows; i++)
+		for(int j = 0; j < image->cols; j++)
+			frame[j*image->rows + i] = (float)Ldata[i*image->step + j];
 
 	// VL SIFT computation:
 	vl_sift_pix const *data ;
 	int                M, N ;
 	data = (vl_sift_pix*)frame;
-	M = image->height;
-	N = image->width;
+	M = image->rows;
+	N = image->cols;
 
-	int                verbose = 1 ;
 	int                O     =   -1 ; //Octaves
-	int                S     =   3 ; //Levels
+	int                S     =   3 ;  //Levels
 	int                o_min =   0 ;
 
 	double             edge_thresh = -1 ;
-	double             peak_thresh =  -1 ;
+	double             peak_thresh = -1 ;
 	double             norm_thresh = -1 ;
 	double             magnif      = -1 ;
 	double             window_size = -1 ;
 
-	//mxArray           *ikeys_array = 0 ; //?
 	double            *ikeys = 0 ; //?
 	int                nikeys = -1 ; //?
 	vl_bool            force_orientations = 0 ;
@@ -110,10 +123,10 @@ void VLSIFT(IplImage* image, vl_uint8* DATAdescr, double* DATAframes, int* nfram
 	*                                                            Do job
 	* -------------------------------------------------------------- */
 	{
-		VlSiftFilt        *filt ;
+		VlSiftFilt         *filt ;
 		vl_bool            first ;
-		double            *frames = 0 ;
-		vl_uint8              *descr  = 0 ;
+		double             *frames = 0 ;
+		vl_uint8           *descr  = 0 ;
 		int                reserved = 0, i,j,q ;
 
 		/* create a filter to process the image */
@@ -253,7 +266,6 @@ void VLSIFT(IplImage* image, vl_uint8* DATAdescr, double* DATAframes, int* nfram
 					frames [4 * (*nframes) + 2] = k -> sigma ;
 					frames [4 * (*nframes) + 3] = VL_PI / 2 - angles [q] ;
 
-
 					for (j = 0 ; j < 128 ; ++j) {
 						float x = 512.0F * rbuf [j] ;
 						x = (x < 255.0F) ? x : 255.0F ;
@@ -268,27 +280,22 @@ void VLSIFT(IplImage* image, vl_uint8* DATAdescr, double* DATAframes, int* nfram
 		if (verbose) {
 			printf ("vl_sift: found %d keypoints\n", (*nframes)) ;
 		}
-		// save variables:
-		memcpy(DATAframes, frames, 4 * (*nframes ) * sizeof(double));
-		memcpy(DATAdescr, descr, 128 * (*nframes ) * sizeof(vl_uint8));
 
-		/*
-		FILE *fpd = fopen("c:\\Descr.txt", "w");
-		for(int p=0;p<(*nframes)*128; p++){
-			fprintf(fpd, "%f\n",(double)descr[p] );
+		if ((*nframes ) < 10000) {
+		    // save variables:
+		    memcpy(DATAframes, frames, 4 * (*nframes ) * sizeof(double));
+		    memcpy(DATAdescr, descr, 128 * (*nframes ) * sizeof(vl_uint8));
+		} else {
+		    (*nframes ) = 0;
 		}
-		fclose(fpd);
-
-		FILE *fpf = fopen("c:\\Frames.txt", "w");
-		for(int p=0;p<(*nframes)*4; p++){
-			fprintf(fpf, "%f\n",frames[p] );
-		}
-		fclose(fpf);
-		*/
 
 		/* cleanup */
-		vl_sift_delete (filt) ;
+		vl_sift_delete (filt);
+
+		free(frames);
+	    free(descr);
 	} /* end: do job */
+
 
 
 	return;
@@ -340,23 +347,61 @@ void make_clustering(vl_uint8 *data, int N, int M, int K)
 }
 
 int main() {
-	IplImage* Timage = cvLoadImage("input.jpg", 0);
-	double*            TFrames = (double*)calloc ( 4 * 10000, sizeof(double) ) ;
-	vl_uint8*          TDescr  = (vl_uint8*)calloc ( 128 * 10000, sizeof(vl_uint8) ) ;
-	int                Tnframes = 0;
-	VLSIFT(Timage, TDescr, TFrames, &Tnframes);
-	TFrames = (double*)realloc (TFrames, 4 * sizeof(double) * Tnframes) ; // = Y X Scale Angle
-	TDescr  = (vl_uint8*)realloc (TDescr,  128 * sizeof(vl_uint8) * Tnframes) ;
+    int MaxNumberOfDescr = 10 * 1024 * 1024;
+    vl_uint8* descr = (vl_uint8*)calloc(128 * MaxNumberOfDescr, sizeof(vl_uint8));
+    int ndescr = 0;
 
-	for(int i=0;i<Tnframes;i++){
-		cvCircle(Timage,
-		cvPoint(TFrames[0+i*4], TFrames[1+i*4]), TFrames[2+i*4],
-		cvScalar(255, 0, 0, 0),
-		1, 8, 0);
+    std::string str;
+    double* TFrames = (double*)calloc(4 * 10000, sizeof(double));
+    vl_uint8* TDescr  = (vl_uint8*)calloc(128 * 10000, sizeof(vl_uint8));
+
+    int NumImagesProcessed = 0;
+	while (!getline(std::cin, str).fail()) {
+
+		boost::char_separator<char> sep("\t"); // default constructed
+		typedef boost::tokenizer<boost::char_separator<char> > TTok;
+		TTok tok(str, sep);
+		std::vector<std::string> strs(tok.begin(), tok.end());
+
+		std::string imgId = strs[0];
+		boost::algorithm::trim(imgId);
+		std::string imgBase64 = strs[1];
+		boost::algorithm::trim(imgBase64);
+
+		std::vector<char> imgBin;
+		GetBinaryFromBase64(imgBase64, imgBin);
+
+		cv::Mat imgCv = cv::imdecode(imgBin, CV_LOAD_IMAGE_GRAYSCALE);
+
+        int                Tnframes = 0;
+        VLSIFT(&imgCv, TDescr, TFrames, &Tnframes, 0);
+
+        if (ndescr + Tnframes > MaxNumberOfDescr) {
+            continue;
+        }
+
+        memcpy(descr + ndescr, TDescr, 128 * Tnframes * sizeof(vl_uint8));
+        ndescr += Tnframes;
+
+        for(int i = 0; i < Tnframes; i++) {
+            circle(imgCv,
+            cvPoint(TFrames[0+i*4], TFrames[1+i*4]), TFrames[2+i*4],
+            cvScalar(255, 0, 0, 0),
+            1, 8, 0);
+        }
+
+        /*
+        cv::namedWindow( "Display window", CV_WINDOW_AUTOSIZE );// Create a window for display.
+		cv::imshow("Display window", imgCv);
+		cv::waitKey(0);
+		*/
+
+		NumImagesProcessed ++;
+
+		if (NumImagesProcessed % 1000 == 0) cout << "processed " << NumImagesProcessed << endl;
 	}
 
-	make_clustering(TDescr, Tnframes, 128, 20);
+	cout << "Extracted " << ndescr << " descriptors" << endl;
 
-	cvShowImage("FrameT", Timage);
-	cvWaitKey(0);
+	make_clustering(descr, ndescr, 128, 20);
 }
