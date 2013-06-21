@@ -27,21 +27,19 @@ using namespace std;
 void make_clustering(vl_uint8 *data, int N, int dim, int K)
 {
     int err = 0 ;
-
-    vl_uint     *asgn = 0 ;
     vl_ikm_acc  *centers = (vl_ikm_acc*)malloc(sizeof(vl_ikm_acc) * dim * K);
 
     int method_type = VL_IKM_ELKAN;
-    int max_niters  = 200 ;
-    int verb = 0 ;
+    int max_niters = 200;
+    int verb = 0;
 
-    VlIKMFilt *ikmf =  vl_ikm_new (method_type);
+    VlIKMFilt *ikmf = vl_ikm_new(method_type);
 
     vl_ikm_set_verbosity(ikmf, verb);
     vl_ikm_set_max_niters(ikmf, max_niters);
     vl_ikm_init_rand_data(ikmf, data, dim, N, K);
 
-    err = vl_ikm_train (ikmf, data, N) ;
+    err = vl_ikm_train(ikmf, data, N);
     if (err) printf("ikmeans: possible overflow!") ;
 
     memcpy(centers, vl_ikm_get_centers (ikmf), sizeof(vl_ikm_acc) * dim * K);
@@ -50,6 +48,7 @@ void make_clustering(vl_uint8 *data, int N, int dim, int K)
         std::ofstream file("centers.bin", std::ios::binary);
         file.write((const char*)centers, sizeof(vl_ikm_acc) * dim * K);
     }
+
     free(centers);
     vl_ikm_delete(ikmf);
 }
@@ -58,6 +57,7 @@ int main() {
     int MaxNumberOfDescr = 10 * 1024 * 1024;
     vl_uint8* descr = (vl_uint8*)calloc(128 * MaxNumberOfDescr, sizeof(vl_uint8));
     int ndescr = 0;
+    std::ofstream file("desrc.bin", std::ios::binary);
 
     std::string str;
     double* TFrames = (double*)calloc(4 * 10000, sizeof(double));
@@ -81,12 +81,14 @@ int main() {
 
 		cv::Mat imgCv = cv::imdecode(imgBin, CV_LOAD_IMAGE_GRAYSCALE);
 
-        int                Tnframes = 0;
+        int Tnframes = 0;
         VLSIFT(&imgCv, TDescr, TFrames, &Tnframes, 0);
 
         if (ndescr + Tnframes > MaxNumberOfDescr) {
             continue;
         }
+
+        file.write((const char*)TDescr, 128 * Tnframes * sizeof(vl_uint8));
 
         memcpy(descr + ndescr, TDescr, 128 * Tnframes * sizeof(vl_uint8));
         ndescr += Tnframes;
