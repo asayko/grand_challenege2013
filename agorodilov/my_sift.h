@@ -1,7 +1,7 @@
-#include <vl/mathop.h>
-#include <vl/sift.h>
-#include <vl/generic.h>
-#include <vl/ikmeans.h>
+#include "vl/mathop.h"
+#include "vl/sift.h"
+#include "vl/generic.h"
+#include "vl/ikmeans.h"
 
 #include <vector>
 #include <iostream>

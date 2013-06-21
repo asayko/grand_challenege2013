@@ -22,18 +22,15 @@ transpose_descriptor (vl_sift_pix* dst, vl_sift_pix* src)
 void VLSIFT(cv::Mat* image, vl_uint8* DATAdescr, double* DATAframes, int* nframes, int verbose ){
 	//Take IplImage -> convert to SINGLE (float):
 	float* frame = (float*)malloc(image->rows * image->cols * sizeof(float));
-	uchar* Ldata = (uchar *)image->data;
+    uchar* Ldata = (uchar*)image->data;
 
 	for(int i = 0; i < image->rows; i++)
 		for(int j = 0; j < image->cols; j++)
 			frame[j*image->rows + i] = (float)Ldata[i*image->step + j];
 
 	// VL SIFT computation:
-	vl_sift_pix const *data ;
-	int                M, N ;
-	data = (vl_sift_pix*)frame;
-	M = image->rows;
-	N = image->cols;
+    vl_sift_pix const *data = (vl_sift_pix*)frame;
+    int M = image->rows, N = image->cols;
 
 	int                O     =   -1 ; //Octaves
 	int                S     =   3 ;  //Levels
@@ -227,7 +224,6 @@ void VLSIFT(cv::Mat* image, vl_uint8* DATAdescr, double* DATAframes, int* nframe
 	    free(descr);
 	} /* end: do job */
 
-
-
+    free(frame);
 	return;
 }

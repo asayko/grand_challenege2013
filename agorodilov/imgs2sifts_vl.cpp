@@ -3,10 +3,10 @@
 #include <opencv2/nonfree/features2d.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-#include <vl/mathop.h>
-#include <vl/sift.h>
-#include <vl/generic.h>
-#include <vl/ikmeans.h>
+#include "vl/mathop.h"
+#include "vl/sift.h"
+#include "vl/generic.h"
+#include "vl/ikmeans.h"
 
 #include <vector>
 #include <iostream>
@@ -22,7 +22,7 @@
 
 using namespace std;
 
-// g++ -O2 imgs2sifts_vl.cpp base64.cpp my_sift.cpp -I /Users/agorodilov/work/msr_image/vlfeat-0.9.16/ `pkg-config opencv --cflags --libs` /Users/agorodilov/work/msr_image/vlfeat-0.9.16/bin/maci64/libvl.dylib  -o imgs2sifts_vl
+// g++ -O2 imgs2sifts_vl.cpp base64.cpp my_sift.cpp `pkg-config opencv --cflags --libs` ./libvl.dylib -o imgs2sifts_vl
 
 void make_clustering(vl_uint8 *data, int N, int dim, int K)
 {
@@ -50,6 +50,8 @@ void make_clustering(vl_uint8 *data, int N, int dim, int K)
         std::ofstream file("centers.bin", std::ios::binary);
         file.write((const char*)centers, sizeof(vl_ikm_acc) * dim * K);
     }
+    free(centers);
+    vl_ikm_delete(ikmf);
 }
 
 int main() {
