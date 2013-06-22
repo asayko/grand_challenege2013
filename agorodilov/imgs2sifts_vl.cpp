@@ -7,6 +7,7 @@
 #include "vl/sift.h"
 #include "vl/generic.h"
 #include "vl/ikmeans.h"
+#include "vl/hikmeans.h"
 
 #include <vector>
 #include <iostream>
@@ -27,7 +28,6 @@ using namespace std;
 void make_clustering(vl_uint8 *data, int N, int dim, int K)
 {
     int err = 0 ;
-    vl_ikm_acc  *centers = (vl_ikm_acc*)malloc(sizeof(vl_ikm_acc) * dim * K);
 
     int method_type = VL_IKM_ELKAN;
     int max_niters = 200;
@@ -42,15 +42,22 @@ void make_clustering(vl_uint8 *data, int N, int dim, int K)
     err = vl_ikm_train(ikmf, data, N);
     if (err) printf("ikmeans: possible overflow!") ;
 
-    memcpy(centers, vl_ikm_get_centers (ikmf), sizeof(vl_ikm_acc) * dim * K);
-
     {
         std::ofstream file("centers.bin", std::ios::binary);
-        file.write((const char*)centers, sizeof(vl_ikm_acc) * dim * K);
+        file.write((const char*)vl_ikm_get_centers(ikmf), sizeof(vl_ikm_acc) * dim * K);
     }
 
-    free(centers);
     vl_ikm_delete(ikmf);
+}
+
+void make_hikmeans(vl_uint8 *data, int N, int dim, int K)
+{
+    int method_type = VL_IKM_ELKAN;
+
+    VlHIKMTree *hikmf = vl_hikm_new(method_type);
+    vl_hikm_init(hikmf, dim, 10, 6);
+
+    vl_hikm_train(hikmf, data, N);
 }
 
 int main() {
@@ -82,7 +89,7 @@ int main() {
 		cv::Mat imgCv = cv::imdecode(imgBin, CV_LOAD_IMAGE_GRAYSCALE);
 
         int Tnframes = 0;
-        VLSIFT(&imgCv, TDescr, TFrames, &Tnframes, 0);
+        VLSIFT(&imgCv, TDescr, TFrames, &Tnframes, 1);
 
         if (ndescr + Tnframes > MaxNumberOfDescr) {
             continue;
@@ -102,7 +109,7 @@ int main() {
         }
         cout << endl;
 */
-        /*
+
         for(int i = 0; i < Tnframes; i++) {
             circle(imgCv,
             cvPoint(TFrames[0+i*4], TFrames[1+i*4]), TFrames[2+i*4],
@@ -113,7 +120,6 @@ int main() {
         cv::namedWindow( "Display window", CV_WINDOW_AUTOSIZE );// Create a window for display.
 		cv::imshow("Display window", imgCv);
 		cv::waitKey(0);
-		*/
 
 		NumImagesProcessed ++;
 

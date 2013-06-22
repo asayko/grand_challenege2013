@@ -37,7 +37,7 @@ void VLSIFT(cv::Mat* image, vl_uint8* DATAdescr, double* DATAframes, int* nframe
 	int                o_min =   0 ;
 
 	double             edge_thresh = -1 ;
-	double             peak_thresh = -1 ;
+    double             peak_thresh = 2.0 ;
 	double             norm_thresh = -1 ;
 	double             magnif      = -1 ;
 	double             window_size = -1 ;
