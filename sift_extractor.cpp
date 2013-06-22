@@ -13,6 +13,8 @@
 
 #include <boost/tokenizer.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/serialization/split_free.hpp>
+#include <boost/serialization/vector.hpp>
 
 #include <algorithm>
 #include <vector>
@@ -90,7 +92,7 @@ void GetBinaryFromBase64(const std::string & str64, std::vector<char> & binData)
 int main() {
 
 	std::string str;
-	float imageSamplingProb = 0.01; // this functionality shouldn't be here, it should be outside, in awk e.g.
+	float imageSamplingProb = 0.4; // this functionality shouldn't be here, it should be outside, in awk e.g.
 	cv::Mat allSampledDescriptors(0, 128, CV_32F);
 	size_t curAllSampledDescriptorsRow = 0;
 	size_t curImgIdx = 0;
@@ -150,18 +152,23 @@ int main() {
 	}
 
 	std::cerr << curImgIdx << " images proceed. "
-			<< allSampledDescriptors.rows << "descriptors collected. Clustering..."
+			<< allSampledDescriptors.rows << " descriptors collected. Clustering..."
 			<< std::endl;
 
 	::cvflann::KMeansIndexParams params(10, 6, cvflann::FLANN_CENTERS_KMEANSPP);
-	cv::Mat clusteringCenters(1000000, 128, CV_32F);
-	//using cv::flann::hierarchicalClustering;
+	cv::Mat clusteringCenters(1100000, 128, CV_32F);
+
 	int numOfClusters = cv::flann::hierarchicalClustering<cv::flann::L2<float> >(
 			allSampledDescriptors,
 			clusteringCenters,
 			params);
 
+	clusteringCenters = clusteringCenters(cv::Range(0, numOfClusters), cv::Range::all());
+
 	std::cerr << "Clustering done. " << numOfClusters << " clusters obtained." << std::endl;
+
+	cv::FileStorage fout("clusters.ext", cv::FileStorage::WRITE);
+	fout << clusteringCenters;
 
 	return 0;
 }
