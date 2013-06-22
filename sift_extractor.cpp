@@ -161,7 +161,7 @@ int main() {
 			clusteringCenters,
 			params);
 
-	std::cerr << "Clustering done." << std::endl;
+	std::cerr << "Clustering done. " << numOfClusters << " clusters obtained." << std::endl;
 
 	return 0;
 }
