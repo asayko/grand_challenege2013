@@ -9,6 +9,7 @@
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/nonfree/features2d.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/flann/flann.hpp>
 
 #include <boost/tokenizer.hpp>
 #include <boost/algorithm/string.hpp>
@@ -89,7 +90,21 @@ void GetBinaryFromBase64(const std::string & str64, std::vector<char> & binData)
 int main() {
 
 	std::string str;
+	float imageSamplingProb = 0.01; // this functionality shouldn't be here, it should be outside, in awk e.g.
+	cv::Mat allSampledDescriptors(0, 128, CV_32F);
+	size_t curAllSampledDescriptorsRow = 0;
+	size_t curImgIdx = 0;
+
 	while (!std::getline(std::cin, str).fail()) {
+
+		if (curImgIdx % 1000 == 0) {
+			std::cerr << curImgIdx << " images done." << std::endl;
+		}
+		++curImgIdx;
+
+		if ((double)rand() / RAND_MAX > imageSamplingProb) {
+			continue; // sample data for fast experiments
+		}
 
 		boost::char_separator<char> sep("\t"); // default constructed
 		typedef boost::tokenizer<boost::char_separator<char> > TTok;
@@ -105,13 +120,11 @@ int main() {
 		GetBinaryFromBase64(imgBase64, imgBin);
 
 		cv::Mat imgCv = cv::imdecode(imgBin, CV_LOAD_IMAGE_COLOR);
-
 		//
 		// cv::namedWindow( "Display window", CV_WINDOW_AUTOSIZE );// Create a window for display.
 		// cv::imshow("Display window", imgCv);
 		// cv::waitKey(0);
 		//
-
 		cv::Ptr<cv::FeatureDetector> featureDetector = new cv::SiftFeatureDetector(0, 3, 0.08, 5, 1.4);
 		std::vector<cv::KeyPoint> keypoints;
 
@@ -121,19 +134,34 @@ int main() {
 		cv::Mat descriptors;
 		featureExtractor->compute(imgCv, keypoints, descriptors);
 
-		std::cout << imgId << "\t" << descriptors.rows << std::endl;
+		//std::cout << imgId << "\t" << descriptors.rows << std::endl;
 		for (size_t descIdx = 0; descIdx < descriptors.rows; ++descIdx) {
 
 			cv::Mat tmp;
 			cv::normalize(descriptors.row(descIdx), tmp);
-			tmp.copyTo(descriptors.row(descIdx));
+			//tmp.copyTo(descriptors.row(descIdx));
+			allSampledDescriptors.push_back(tmp);
 
-			for (size_t i = 0; i < descriptors.cols; ++i) {
-				std::cout << descriptors.at<float>(descIdx, i) << "\t";
-			}
-			std::cout << std::endl;
+			//for (size_t i = 0; i < descriptors.cols; ++i) {
+			//	std::cout << descriptors.at<float>(descIdx, i) << "\t";
+			//}
+			//std::cout << std::endl;
 		}
 	}
+
+	std::cerr << curImgIdx << " images proceed. "
+			<< allSampledDescriptors.rows << "descriptors collected. Clustering..."
+			<< std::endl;
+
+	::cvflann::KMeansIndexParams params(10, 6, cvflann::FLANN_CENTERS_KMEANSPP);
+	cv::Mat clusteringCenters(1000000, 128, CV_32F);
+	//using cv::flann::hierarchicalClustering;
+	int numOfClusters = cv::flann::hierarchicalClustering<cv::flann::L2<float> >(
+			allSampledDescriptors,
+			clusteringCenters,
+			params);
+
+	std::cerr << "Clustering done." << std::endl;
 
 	return 0;
 }
