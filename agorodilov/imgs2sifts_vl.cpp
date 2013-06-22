@@ -7,6 +7,7 @@
 #include "vl/sift.h"
 #include "vl/generic.h"
 #include "vl/ikmeans.h"
+#include "vl/hikmeans.h"
 
 #include <vector>
 #include <iostream>
@@ -28,36 +29,49 @@ void make_clustering(vl_uint8 *data, int N, int dim, int K)
 {
     int err = 0 ;
 
-    vl_uint     *asgn = 0 ;
-    vl_ikm_acc  *centers = (vl_ikm_acc*)malloc(sizeof(vl_ikm_acc) * dim * K);
-
     int method_type = VL_IKM_ELKAN;
-    int max_niters  = 200 ;
-    int verb = 0 ;
+    int max_niters = 200;
+    int verb = 0;
 
-    VlIKMFilt *ikmf =  vl_ikm_new (method_type);
+    VlIKMFilt *ikmf = vl_ikm_new(method_type);
 
     vl_ikm_set_verbosity(ikmf, verb);
     vl_ikm_set_max_niters(ikmf, max_niters);
     vl_ikm_init_rand_data(ikmf, data, dim, N, K);
 
-    err = vl_ikm_train (ikmf, data, N) ;
+    err = vl_ikm_train(ikmf, data, N);
     if (err) printf("ikmeans: possible overflow!") ;
-
-    memcpy(centers, vl_ikm_get_centers (ikmf), sizeof(vl_ikm_acc) * dim * K);
 
     {
         std::ofstream file("centers.bin", std::ios::binary);
-        file.write((const char*)centers, sizeof(vl_ikm_acc) * dim * K);
+        file.write((const char*)vl_ikm_get_centers(ikmf), sizeof(vl_ikm_acc) * dim * K);
     }
-    free(centers);
+
     vl_ikm_delete(ikmf);
 }
 
-int main() {
+void make_hikmeans(vl_uint8 *data, int N, int dim, int K)
+{
+    int method_type = VL_IKM_ELKAN;
+
+    VlHIKMTree *hikmf = vl_hikm_new(method_type);
+    vl_hikm_init(hikmf, dim, 10, 6);
+
+    vl_hikm_train(hikmf, data, N);
+}
+
+int main(int argc, char* argv[]) {
+
+    if (argc != 2)
+        exit(0);
+
+    string tag(argv[1]);
+
     int MaxNumberOfDescr = 10 * 1024 * 1024;
     vl_uint8* descr = (vl_uint8*)calloc(128 * MaxNumberOfDescr, sizeof(vl_uint8));
     int ndescr = 0;
+    string filename = string("desrc.bin.") + tag;
+    std::ofstream file(filename.c_str(), std::ios::binary);
 
     std::string str;
     double* TFrames = (double*)calloc(4 * 10000, sizeof(double));
@@ -81,15 +95,13 @@ int main() {
 
 		cv::Mat imgCv = cv::imdecode(imgBin, CV_LOAD_IMAGE_GRAYSCALE);
 
-        int                Tnframes = 0;
-        VLSIFT(&imgCv, TDescr, TFrames, &Tnframes, 0);
+        int Tnframes = 0;
+        VLSIFT(&imgCv, TDescr, TFrames, &Tnframes, 1);
 
-        if (ndescr + Tnframes > MaxNumberOfDescr) {
-            continue;
-        }
+        file.write((const char*)TDescr, 128 * Tnframes * sizeof(vl_uint8));
 
-        memcpy(descr + ndescr, TDescr, 128 * Tnframes * sizeof(vl_uint8));
-        ndescr += Tnframes;
+        // memcpy(descr + ndescr, TDescr, 128 * Tnframes * sizeof(vl_uint8));
+        // ndescr += Tnframes;
 /*
         char buffer[128*2 + 1];
         buffer[128*2] = 0;
@@ -99,8 +111,8 @@ int main() {
             cout << buffer << "\t";
         }
         cout << endl;
-*/
-        /*
+
+
         for(int i = 0; i < Tnframes; i++) {
             circle(imgCv,
             cvPoint(TFrames[0+i*4], TFrames[1+i*4]), TFrames[2+i*4],
@@ -111,8 +123,7 @@ int main() {
         cv::namedWindow( "Display window", CV_WINDOW_AUTOSIZE );// Create a window for display.
 		cv::imshow("Display window", imgCv);
 		cv::waitKey(0);
-		*/
-
+*/
 		NumImagesProcessed ++;
 
 		if (NumImagesProcessed % 1000 == 0) cerr << "processed " << NumImagesProcessed << endl;
@@ -120,5 +131,5 @@ int main() {
 
 	cout << "Extracted " << ndescr << " descriptors" << endl;
 
-	make_clustering(descr, ndescr, 128, 8000);
+    // make_clustering(descr, ndescr, 128, 8000);
 }
