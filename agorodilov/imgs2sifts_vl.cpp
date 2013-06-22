@@ -60,11 +60,18 @@ void make_hikmeans(vl_uint8 *data, int N, int dim, int K)
     vl_hikm_train(hikmf, data, N);
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+
+    if (argc != 2)
+        exit(0);
+
+    string tag(argv[1]);
+
     int MaxNumberOfDescr = 10 * 1024 * 1024;
     vl_uint8* descr = (vl_uint8*)calloc(128 * MaxNumberOfDescr, sizeof(vl_uint8));
     int ndescr = 0;
-    std::ofstream file("desrc.bin", std::ios::binary);
+    string filename = string("desrc.bin.") + tag;
+    std::ofstream file(filename.c_str(), std::ios::binary);
 
     std::string str;
     double* TFrames = (double*)calloc(4 * 10000, sizeof(double));
@@ -91,14 +98,10 @@ int main() {
         int Tnframes = 0;
         VLSIFT(&imgCv, TDescr, TFrames, &Tnframes, 1);
 
-        if (ndescr + Tnframes > MaxNumberOfDescr) {
-            continue;
-        }
-
         file.write((const char*)TDescr, 128 * Tnframes * sizeof(vl_uint8));
 
-        memcpy(descr + ndescr, TDescr, 128 * Tnframes * sizeof(vl_uint8));
-        ndescr += Tnframes;
+        // memcpy(descr + ndescr, TDescr, 128 * Tnframes * sizeof(vl_uint8));
+        // ndescr += Tnframes;
 /*
         char buffer[128*2 + 1];
         buffer[128*2] = 0;
@@ -108,7 +111,7 @@ int main() {
             cout << buffer << "\t";
         }
         cout << endl;
-*/
+
 
         for(int i = 0; i < Tnframes; i++) {
             circle(imgCv,
@@ -120,7 +123,7 @@ int main() {
         cv::namedWindow( "Display window", CV_WINDOW_AUTOSIZE );// Create a window for display.
 		cv::imshow("Display window", imgCv);
 		cv::waitKey(0);
-
+*/
 		NumImagesProcessed ++;
 
 		if (NumImagesProcessed % 1000 == 0) cerr << "processed " << NumImagesProcessed << endl;
@@ -128,5 +131,5 @@ int main() {
 
 	cout << "Extracted " << ndescr << " descriptors" << endl;
 
-	make_clustering(descr, ndescr, 128, 8000);
+    // make_clustering(descr, ndescr, 128, 8000);
 }
