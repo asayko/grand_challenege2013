@@ -138,10 +138,10 @@ int main() {
 		TTok tok(str, sep);
 		std::vector<std::string> strs(tok.begin(), tok.end());
 
-		if (strs.size() != 2) {
+		if (2 != strs.size()) {
 			std::cerr << "Bad line for imgId: " << strs[0] << std::endl;
 		}
-		assert(2 != strs.size());
+		assert(2 == strs.size());
 
 		std::string imgId = strs[0];
 		boost::algorithm::trim(imgId);
