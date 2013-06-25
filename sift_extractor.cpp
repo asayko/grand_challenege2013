@@ -89,6 +89,30 @@ void GetBinaryFromBase64(const std::string & str64, std::vector<char> & binData)
 	*/
 }
 
+void ExtractDescriptorsToVector(const cv::Mat & imgCv, cv::Mat & allDescriptors) {
+	cv::Ptr<cv::FeatureDetector> featureDetector = new cv::SiftFeatureDetector(0, 3, 0.08, 5, 1.4);
+	std::vector<cv::KeyPoint> keypoints;
+
+	featureDetector->detect(imgCv, keypoints);
+	cv::Ptr<cv::SiftDescriptorExtractor> featureExtractor = new cv::SiftDescriptorExtractor();
+
+	cv::Mat descriptors;
+	featureExtractor->compute(imgCv, keypoints, descriptors);
+
+	//std::cout << imgId << "\t" << descriptors.rows << std::endl;
+	for (size_t descIdx = 0; descIdx < descriptors.rows; ++descIdx) {
+		cv::Mat tmp;
+		cv::normalize(descriptors.row(descIdx), tmp);
+		//tmp.copyTo(descriptors.row(descIdx));
+		allDescriptors.push_back(tmp);
+
+		//for (size_t i = 0; i < descriptors.cols; ++i) {
+		//	std::cout << descriptors.at<float>(descIdx, i) << "\t";
+		//}
+		//std::cout << std::endl;
+	}
+}
+
 int main() {
 
 	std::string str;
@@ -121,33 +145,16 @@ int main() {
 		std::vector<char> imgBin;
 		GetBinaryFromBase64(imgBase64, imgBin);
 
-		cv::Mat imgCv = cv::imdecode(imgBin, CV_LOAD_IMAGE_COLOR);
-		//
-		// cv::namedWindow( "Display window", CV_WINDOW_AUTOSIZE );// Create a window for display.
-		// cv::imshow("Display window", imgCv);
-		// cv::waitKey(0);
-		//
-		cv::Ptr<cv::FeatureDetector> featureDetector = new cv::SiftFeatureDetector(0, 3, 0.08, 5, 1.4);
-		std::vector<cv::KeyPoint> keypoints;
-
-		featureDetector->detect(imgCv, keypoints);
-		cv::Ptr<cv::SiftDescriptorExtractor> featureExtractor = new cv::SiftDescriptorExtractor();
-
-		cv::Mat descriptors;
-		featureExtractor->compute(imgCv, keypoints, descriptors);
-
-		//std::cout << imgId << "\t" << descriptors.rows << std::endl;
-		for (size_t descIdx = 0; descIdx < descriptors.rows; ++descIdx) {
-
-			cv::Mat tmp;
-			cv::normalize(descriptors.row(descIdx), tmp);
-			//tmp.copyTo(descriptors.row(descIdx));
-			allSampledDescriptors.push_back(tmp);
-
-			//for (size_t i = 0; i < descriptors.cols; ++i) {
-			//	std::cout << descriptors.at<float>(descIdx, i) << "\t";
-			//}
-			//std::cout << std::endl;
+		try {
+			cv::Mat imgCv = cv::imdecode(imgBin, CV_LOAD_IMAGE_COLOR);
+			//
+			// cv::namedWindow( "Display window", CV_WINDOW_AUTOSIZE );// Create a window for display.
+			// cv::imshow("Display window", imgCv);
+			// cv::waitKey(0);
+			//
+			ExtractDescriptorsToVector(imgCv, allSampledDescriptors);
+		} catch (...) {
+			std::cerr << "Error while processing " << imgId << std::endl;
 		}
 	}
 
