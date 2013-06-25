@@ -118,6 +118,7 @@ int main() {
 	std::string str;
 	float imageSamplingProb = 0.4; // this functionality shouldn't be here, it should be outside, in awk e.g.
 	cv::Mat allSampledDescriptors(0, 128, CV_32F);
+	allSampledDescriptors.reserve(1000000);
 	size_t curAllSampledDescriptorsRow = 0;
 	size_t curImgIdx = 0;
 
@@ -136,6 +137,11 @@ int main() {
 		typedef boost::tokenizer<boost::char_separator<char> > TTok;
 		TTok tok(str, sep);
 		std::vector<std::string> strs(tok.begin(), tok.end());
+
+		if (strs.size() != 2) {
+			std::cerr << "Bad line for imgId: " << strs[0] << std::endl;
+		}
+		assert(2 != strs.size());
 
 		std::string imgId = strs[0];
 		boost::algorithm::trim(imgId);
