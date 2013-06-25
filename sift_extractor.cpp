@@ -142,10 +142,9 @@ int main() {
 		std::string imgBase64 = strs[1];
 		boost::algorithm::trim(imgBase64);
 
-		std::vector<char> imgBin;
-		GetBinaryFromBase64(imgBase64, imgBin);
-
 		try {
+			std::vector<char> imgBin;
+			GetBinaryFromBase64(imgBase64, imgBin);
 			cv::Mat imgCv = cv::imdecode(imgBin, CV_LOAD_IMAGE_COLOR);
 			//
 			// cv::namedWindow( "Display window", CV_WINDOW_AUTOSIZE );// Create a window for display.
