@@ -1,10 +1,3 @@
-// the program reads from stdin tab-separeted pairs ImgId"\t"Base64EncodedJpegImg
-// and writes to stdout:
-// ImgId"\t"NumOfSifts"\n"
-// SIFT1"\n"
-// ...
-// SIFT1"\n"
-
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/nonfree/features2d.hpp>
@@ -15,6 +8,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/serialization/split_free.hpp>
 #include <boost/serialization/vector.hpp>
+
+#include <pthread.h>
 
 #include <algorithm>
 #include <vector>
@@ -70,26 +65,12 @@ void GetBinaryFromBase64(const std::string & str64, std::vector<char> & binData)
 	binData.resize(str64.size());
 	size_t t = Base64Decode(&*binData.begin(), str64.c_str(), str64.c_str() + str64.size());
 	binData.resize(t);
-
-	/*
-	binData.clear();
-	boost::archive::iterators::detail::to_6_bit<char> t;
-	for (size_t i = 0; i < str64.size(); ++i) {
-		std::cerr << t(str64[i]) == -1 << "\n";
-	}
-	std::cerr << std::endl;
-
-	typedef boost::archive::iterators::transform_width<
-	    boost::archive::iterators::binary_from_base64<char *>, 8, 6> TToBinnaryTransformerIter;
-
-	std::copy(
-			TToBinnaryTransformerIter(&*str64.begin()),
-			TToBinnaryTransformerIter(&*str64.end()),
-			std::back_inserter(binData));
-	*/
 }
 
-void ExtractDescriptorsToVector(const cv::Mat & imgCv, cv::Mat & allDescriptors) {
+void ExtractDescriptorsToStorage(
+		const cv::Mat & imgCv,
+		cv::Mat & allDescriptors,
+		pthread_mutex_t * allDescriptorsLock) {
 	cv::Ptr<cv::FeatureDetector> featureDetector = new cv::SiftFeatureDetector(0, 3, 0.08, 5, 1.4);
 	std::vector<cv::KeyPoint> keypoints;
 
@@ -99,47 +80,63 @@ void ExtractDescriptorsToVector(const cv::Mat & imgCv, cv::Mat & allDescriptors)
 	cv::Mat descriptors;
 	featureExtractor->compute(imgCv, keypoints, descriptors);
 
-	//std::cout << imgId << "\t" << descriptors.rows << std::endl;
+	// Get lock
+	pthread_mutex_lock(allDescriptorsLock);
+
 	for (size_t descIdx = 0; descIdx < descriptors.rows; ++descIdx) {
 		cv::Mat tmp;
 		cv::normalize(descriptors.row(descIdx), tmp);
-		//tmp.copyTo(descriptors.row(descIdx));
 		allDescriptors.push_back(tmp);
-
-		//for (size_t i = 0; i < descriptors.cols; ++i) {
-		//	std::cout << descriptors.at<float>(descIdx, i) << "\t";
-		//}
-		//std::cout << std::endl;
 	}
+
+	std::cerr << allDescriptors.rows << "descriptors obtained." << std::endl;
+
+	// Release lock
+	pthread_mutex_unlock(allDescriptorsLock);
 }
 
-int main() {
 
-	std::string str;
-	float imageSamplingProb = 0.4; // this functionality shouldn't be here, it should be outside, in awk e.g.
-	cv::Mat allSampledDescriptors(0, 128, CV_32F);
-	allSampledDescriptors.reserve(1000000);
-	size_t curAllSampledDescriptorsRow = 0;
-	size_t curImgIdx = 0;
+struct TSiftExtractorThreadParams {
+	const char * FileName;
+	size_t FileSize;
+	size_t ThreadNum;
+	size_t ThreadsNum;
+	double ImageSamplingProb;
+	pthread_mutex_t * extractedSiftStorageLock;
+	cv::Mat * extractedSiftStorage;
+};
 
-	while (!std::getline(std::cin, str).fail()) {
+void * ExtractSiftsThreadFunc(void * _params) {
+	const TSiftExtractorThreadParams * params = (const TSiftExtractorThreadParams *) _params;
+	std::ifstream fin(params->FileName);
+	fin.seekg(params->ThreadNum * (params->FileSize / params->ThreadsNum));
 
-		if (curImgIdx % 1000 == 0) {
-			std::cerr << curImgIdx << " images done." << std::endl;
-		}
-		++curImgIdx;
+	size_t lastByte = params->FileSize;
+	if (params->ThreadNum != params->ThreadsNum - 1) {
+		lastByte = (params->ThreadNum + 1) * (params->FileSize / params->ThreadsNum) + 1;
+	}
 
-		if ((double)rand() / RAND_MAX > imageSamplingProb) {
+	if (params->ThreadNum != 0) {
+		while (!fin.fail() &&  fin.get() != '\n');
+	}
+
+	if (params->ThreadNum == 1) std::cerr << "Ola" << std::endl;
+
+	while (!fin.fail() && fin.tellg() < lastByte) {
+		std::string str;
+		std::getline(fin, str);
+
+		if ((double)rand() / RAND_MAX > params->ImageSamplingProb) {
 			continue; // sample data for fast experiments
 		}
 
-		boost::char_separator<char> sep("\t"); // default constructed
+		boost::char_separator<char> sep("\t");
 		typedef boost::tokenizer<boost::char_separator<char> > TTok;
 		TTok tok(str, sep);
 		std::vector<std::string> strs(tok.begin(), tok.end());
 
 		if (2 != strs.size()) {
-			std::cerr << "Bad line for imgId: " << strs[0] << std::endl;
+			std::cerr << "Bad line for imgId: " << str.substr(0, 10) << std::endl;
 		}
 		assert(2 == strs.size());
 
@@ -152,35 +149,56 @@ int main() {
 			std::vector<char> imgBin;
 			GetBinaryFromBase64(imgBase64, imgBin);
 			cv::Mat imgCv = cv::imdecode(imgBin, CV_LOAD_IMAGE_COLOR);
-			//
-			// cv::namedWindow( "Display window", CV_WINDOW_AUTOSIZE );// Create a window for display.
-			// cv::imshow("Display window", imgCv);
-			// cv::waitKey(0);
-			//
-			ExtractDescriptorsToVector(imgCv, allSampledDescriptors);
+			ExtractDescriptorsToStorage(imgCv,
+					*params->extractedSiftStorage,
+					params->extractedSiftStorageLock);
 		} catch (...) {
 			std::cerr << "Error while processing " << imgId << std::endl;
 		}
 	}
 
-	std::cerr << curImgIdx << " images proceed. "
-			<< allSampledDescriptors.rows << " descriptors collected. Clustering..."
-			<< std::endl;
+	return NULL;
+}
 
-	::cvflann::KMeansIndexParams params(10, 6, cvflann::FLANN_CENTERS_KMEANSPP);
-	cv::Mat clusteringCenters(1100000, 128, CV_32F);
+int main() {
+	const char * fileName = "/Users/asayko/data/grand_challenge/Train/TrainImageSetSmall.tsv";
+	const double imageSamplingProb = 0.5;
+	std::ifstream fin(fileName, std::ifstream::in | std::ifstream::binary);
+	fin.seekg(0, std::ifstream::end);
+	size_t fileSize = fin.tellg();
+	const size_t NUM_THREADS = 12;
 
-	int numOfClusters = cv::flann::hierarchicalClustering<cv::flann::L2<float> >(
-			allSampledDescriptors,
-			clusteringCenters,
-			params);
+	cv::Mat descriptorsStorage(0, 128, CV_32F);
+	descriptorsStorage.reserve(30000000);
+	pthread_mutex_t descriptorsStorageLock;
+	pthread_mutex_init(&descriptorsStorageLock, NULL);
 
-	clusteringCenters = clusteringCenters(cv::Range(0, numOfClusters), cv::Range::all());
+	pthread_t threads[NUM_THREADS];
+	TSiftExtractorThreadParams siftExtractorThreadParams[NUM_THREADS];
+	for (size_t i = 0; i < NUM_THREADS; ++i) {
+		siftExtractorThreadParams[i].FileName = fileName;
+		siftExtractorThreadParams[i].FileSize = fileSize;
+		siftExtractorThreadParams[i].ThreadNum = i;
+		siftExtractorThreadParams[i].ThreadsNum = NUM_THREADS;
+		siftExtractorThreadParams[i].ImageSamplingProb = imageSamplingProb;
+		siftExtractorThreadParams[i].extractedSiftStorageLock = &descriptorsStorageLock;
+		siftExtractorThreadParams[i].extractedSiftStorage = &descriptorsStorage;
 
-	std::cerr << "Clustering done. " << numOfClusters << " clusters obtained." << std::endl;
+		int rc = pthread_create(&threads[i],
+		                        NULL,
+		                        ExtractSiftsThreadFunc,
+		                        (void *) &siftExtractorThreadParams[i]);
+		if (rc) {
+			std::cerr << "ERROR; return code from pthread_create() is " << rc << std::endl;
+			exit(1);
+		}
+	}
 
-	cv::FileStorage fout("clusters.ext", cv::FileStorage::WRITE);
-	fout << clusteringCenters;
+    for (size_t i = 0; i < NUM_THREADS; ++i) {
+        pthread_join(threads[i], NULL);
+    }
 
-	return 0;
+
+    pthread_mutex_destroy(&descriptorsStorageLock);
+    return 0;
 }
