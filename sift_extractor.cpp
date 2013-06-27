@@ -157,8 +157,23 @@ void * ExtractSiftsThreadFunc(void * _params) {
 	return NULL;
 }
 
+void WriteCvMatToFile(const cv::Mat & mat, const char * fileName) {
+	std::ofstream fout(fileName);
+
+	fout << mat.rows << "\t" << mat.cols << std::endl;
+	for (size_t rowId = 0; rowId < mat.rows; ++rowId) {
+		for (size_t colId = 0; colId < mat.cols; ++colId) {
+			fout << mat.at<float>(rowId , colId) << "\t";
+		}
+		fout << std::endl;
+	}
+
+}
+
 int main() {
 	const char * fileName = "/Users/asayko/data/grand_challenge/Train/TrainImageSetSmall.tsv";
+	const char * outVocabularyFineName = "vocabulary.tsv";
+	const size_t visVocabularySize = 10000;
 	std::ifstream fin(fileName, std::ifstream::in | std::ifstream::binary);
 	fin.seekg(0, std::ifstream::end);
 	size_t fileSize = fin.tellg();
@@ -201,17 +216,30 @@ int main() {
                     << descriptorsStorage.rows << " descriptors collected. Clustering..."
                     << std::endl;
 
-    ::cvflann::KMeansIndexParams params(10, 6, cvflann::FLANN_CENTERS_KMEANSPP);
-    cv::Mat clusteringCenters(1100000, 128, CV_32F);
+    //::cvflann::KMeansIndexParams params(10, 6, cvflann::FLANN_CENTERS_KMEANSPP);
+    cv::Mat clusteringCenters(visVocabularySize, 128, CV_32F);
+    cv::Mat clusteringLabels;
+    //int numOfClusters = cv::flann::hierarchicalClustering<cv::flann::L2<float> >(
+    //                descriptorsStorage,
+    //                clusteringCenters,
+    //                params);
+    size_t attemps = 3;
+    double clusteringErr = cv::kmeans(descriptorsStorage,
+    		visVocabularySize,
+    		clusteringLabels,
+    		cv::TermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 10000, 1e-7),
+    		attemps,
+    		cv::KMEANS_PP_CENTERS,
+    		clusteringCenters);
 
-    int numOfClusters = cv::flann::hierarchicalClustering<cv::flann::L2<float> >(
-                    descriptorsStorage,
-                    clusteringCenters,
-                    params);
+    //clusteringCenters = clusteringCenters(cv::Range(0, numOfClusters - 1), cv::Range::all());
 
-    clusteringCenters = clusteringCenters(cv::Range(0, numOfClusters), cv::Range::all());
+    std::cerr << "Clustering done. " << visVocabularySize << " clusters obtained. Writing vocabulary to "
+    		<< outVocabularyFineName << std::endl;
 
-    std::cerr << "Clustering done. " << numOfClusters << " clusters obtained." << std::endl;
+    WriteCvMatToFile(clusteringCenters, outVocabularyFineName);
+
+    std::cerr << "Finished." << std::endl;
 
     return 0;
 }
