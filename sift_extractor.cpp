@@ -71,7 +71,8 @@ void ExtractDescriptorsToStorage(
 		const cv::Mat & imgCv,
 		cv::Mat & allDescriptors,
 		pthread_mutex_t * allDescriptorsLock,
-		long unsigned int * processedImagesCounter) {
+		long unsigned int * processedImagesCounter,
+		double takeSiftDescriptorProb) {
 	cv::Ptr<cv::FeatureDetector> featureDetector = new cv::SiftFeatureDetector(0, 3, 0.08, 5, 1.4);
 	std::vector<cv::KeyPoint> keypoints;
 
@@ -85,9 +86,12 @@ void ExtractDescriptorsToStorage(
 	pthread_mutex_lock(allDescriptorsLock);
 
 	for (size_t descIdx = 0; descIdx < descriptors.rows; ++descIdx) {
-		cv::Mat tmp;
-		cv::normalize(descriptors.row(descIdx), tmp);
-		allDescriptors.push_back(tmp);
+		// Sample sifts
+		if (rand() / (double) RAND_MAX < takeSiftDescriptorProb) {
+			cv::Mat tmp;
+			cv::normalize(descriptors.row(descIdx), tmp);
+			allDescriptors.push_back(tmp);
+		}
 	}
 	if (*processedImagesCounter % 1000 == 0) {
 		std::cerr << *processedImagesCounter << " images proceed." << std::endl;
@@ -103,6 +107,7 @@ struct TSiftExtractorThreadParams {
 	size_t FileSize;
 	size_t ThreadNum;
 	size_t ThreadsNum;
+	double TakeSiftDescriptorProb;
 	pthread_mutex_t * extractedSiftStorageLock;
 	cv::Mat * extractedSiftStorage;
 	long unsigned int  * ProcessedImagesCounter;
@@ -148,7 +153,8 @@ void * ExtractSiftsThreadFunc(void * _params) {
 			ExtractDescriptorsToStorage(imgCv,
 					*params->extractedSiftStorage,
 					params->extractedSiftStorageLock,
-					params->ProcessedImagesCounter);
+					params->ProcessedImagesCounter,
+					params->TakeSiftDescriptorProb);
 		} catch (...) {
 			std::cerr << "Error while processing " << imgId << std::endl;
 		}
@@ -172,6 +178,7 @@ void WriteCvMatToFile(const cv::Mat & mat, const char * fileName) {
 
 int main() {
 	const char * fileName = "/Users/asayko/data/grand_challenge/Train/TrainImageSetSmall.tsv";
+	const double takeSiftDescriptorProb = 0.05;
 	const char * outVocabularyFineName = "vocabulary.tsv";
 	const size_t visVocabularySize = 10000;
 	std::ifstream fin(fileName, std::ifstream::in | std::ifstream::binary);
@@ -193,6 +200,7 @@ int main() {
 		siftExtractorThreadParams[i].FileSize = fileSize;
 		siftExtractorThreadParams[i].ThreadNum = i;
 		siftExtractorThreadParams[i].ThreadsNum = NUM_THREADS;
+		siftExtractorThreadParams[i].TakeSiftDescriptorProb = takeSiftDescriptorProb;
 		siftExtractorThreadParams[i].extractedSiftStorageLock = &descriptorsStorageLock;
 		siftExtractorThreadParams[i].extractedSiftStorage = &descriptorsStorage;
 		siftExtractorThreadParams[i].ProcessedImagesCounter = &processedImagesCounter;
