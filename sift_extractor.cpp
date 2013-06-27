@@ -70,7 +70,8 @@ void GetBinaryFromBase64(const std::string & str64, std::vector<char> & binData)
 void ExtractDescriptorsToStorage(
 		const cv::Mat & imgCv,
 		cv::Mat & allDescriptors,
-		pthread_mutex_t * allDescriptorsLock) {
+		pthread_mutex_t * allDescriptorsLock,
+		long unsigned int * processedImagesCounter) {
 	cv::Ptr<cv::FeatureDetector> featureDetector = new cv::SiftFeatureDetector(0, 3, 0.08, 5, 1.4);
 	std::vector<cv::KeyPoint> keypoints;
 
@@ -88,9 +89,10 @@ void ExtractDescriptorsToStorage(
 		cv::normalize(descriptors.row(descIdx), tmp);
 		allDescriptors.push_back(tmp);
 	}
-
-	std::cerr << allDescriptors.rows << "descriptors obtained." << std::endl;
-
+	if (*processedImagesCounter % 1000 == 0) {
+		std::cerr << *processedImagesCounter << " images proceed." << std::endl;
+	}
+	++(*processedImagesCounter);
 	// Release lock
 	pthread_mutex_unlock(allDescriptorsLock);
 }
@@ -101,9 +103,9 @@ struct TSiftExtractorThreadParams {
 	size_t FileSize;
 	size_t ThreadNum;
 	size_t ThreadsNum;
-	double ImageSamplingProb;
 	pthread_mutex_t * extractedSiftStorageLock;
 	cv::Mat * extractedSiftStorage;
+	long unsigned int  * ProcessedImagesCounter;
 };
 
 void * ExtractSiftsThreadFunc(void * _params) {
@@ -120,15 +122,9 @@ void * ExtractSiftsThreadFunc(void * _params) {
 		while (!fin.fail() &&  fin.get() != '\n');
 	}
 
-	if (params->ThreadNum == 1) std::cerr << "Ola" << std::endl;
-
 	while (!fin.fail() && fin.tellg() < lastByte) {
 		std::string str;
 		std::getline(fin, str);
-
-		if ((double)rand() / RAND_MAX > params->ImageSamplingProb) {
-			continue; // sample data for fast experiments
-		}
 
 		boost::char_separator<char> sep("\t");
 		typedef boost::tokenizer<boost::char_separator<char> > TTok;
@@ -151,7 +147,8 @@ void * ExtractSiftsThreadFunc(void * _params) {
 			cv::Mat imgCv = cv::imdecode(imgBin, CV_LOAD_IMAGE_COLOR);
 			ExtractDescriptorsToStorage(imgCv,
 					*params->extractedSiftStorage,
-					params->extractedSiftStorageLock);
+					params->extractedSiftStorageLock,
+					params->ProcessedImagesCounter);
 		} catch (...) {
 			std::cerr << "Error while processing " << imgId << std::endl;
 		}
@@ -162,7 +159,6 @@ void * ExtractSiftsThreadFunc(void * _params) {
 
 int main() {
 	const char * fileName = "/Users/asayko/data/grand_challenge/Train/TrainImageSetSmall.tsv";
-	const double imageSamplingProb = 0.5;
 	std::ifstream fin(fileName, std::ifstream::in | std::ifstream::binary);
 	fin.seekg(0, std::ifstream::end);
 	size_t fileSize = fin.tellg();
@@ -171,6 +167,8 @@ int main() {
 	cv::Mat descriptorsStorage(0, 128, CV_32F);
 	descriptorsStorage.reserve(30000000);
 	pthread_mutex_t descriptorsStorageLock;
+	long unsigned int processedImagesCounter = 0;
+
 	pthread_mutex_init(&descriptorsStorageLock, NULL);
 
 	pthread_t threads[NUM_THREADS];
@@ -180,9 +178,9 @@ int main() {
 		siftExtractorThreadParams[i].FileSize = fileSize;
 		siftExtractorThreadParams[i].ThreadNum = i;
 		siftExtractorThreadParams[i].ThreadsNum = NUM_THREADS;
-		siftExtractorThreadParams[i].ImageSamplingProb = imageSamplingProb;
 		siftExtractorThreadParams[i].extractedSiftStorageLock = &descriptorsStorageLock;
 		siftExtractorThreadParams[i].extractedSiftStorage = &descriptorsStorage;
+		siftExtractorThreadParams[i].ProcessedImagesCounter = &processedImagesCounter;
 
 		int rc = pthread_create(&threads[i],
 		                        NULL,
@@ -197,8 +195,23 @@ int main() {
     for (size_t i = 0; i < NUM_THREADS; ++i) {
         pthread_join(threads[i], NULL);
     }
-
-
     pthread_mutex_destroy(&descriptorsStorageLock);
+
+    std::cerr << processedImagesCounter << " images proceed. "
+                    << descriptorsStorage.rows << " descriptors collected. Clustering..."
+                    << std::endl;
+
+    ::cvflann::KMeansIndexParams params(10, 6, cvflann::FLANN_CENTERS_KMEANSPP);
+    cv::Mat clusteringCenters(1100000, 128, CV_32F);
+
+    int numOfClusters = cv::flann::hierarchicalClustering<cv::flann::L2<float> >(
+                    descriptorsStorage,
+                    clusteringCenters,
+                    params);
+
+    clusteringCenters = clusteringCenters(cv::Range(0, numOfClusters), cv::Range::all());
+
+    std::cerr << "Clustering done. " << numOfClusters << " clusters obtained." << std::endl;
+
     return 0;
 }
