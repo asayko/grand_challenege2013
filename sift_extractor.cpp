@@ -71,7 +71,8 @@ void ExtractDescriptorsToStorage(
 		const cv::Mat & imgCv,
 		cv::Mat & allDescriptors,
 		pthread_mutex_t * allDescriptorsLock,
-		long unsigned int * processedImagesCounter) {
+		long unsigned int * processedImagesCounter,
+		double takeSiftDescriptorProb) {
 	cv::Ptr<cv::FeatureDetector> featureDetector = new cv::SiftFeatureDetector(0, 3, 0.08, 5, 1.4);
 	std::vector<cv::KeyPoint> keypoints;
 
@@ -85,9 +86,12 @@ void ExtractDescriptorsToStorage(
 	pthread_mutex_lock(allDescriptorsLock);
 
 	for (size_t descIdx = 0; descIdx < descriptors.rows; ++descIdx) {
-		cv::Mat tmp;
-		cv::normalize(descriptors.row(descIdx), tmp);
-		allDescriptors.push_back(tmp);
+		// Sample sifts
+		if (rand() / (double) RAND_MAX < takeSiftDescriptorProb) {
+			cv::Mat tmp;
+			cv::normalize(descriptors.row(descIdx), tmp);
+			allDescriptors.push_back(tmp);
+		}
 	}
 	if (*processedImagesCounter % 1000 == 0) {
 		std::cerr << *processedImagesCounter << " images proceed." << std::endl;
@@ -103,6 +107,7 @@ struct TSiftExtractorThreadParams {
 	size_t FileSize;
 	size_t ThreadNum;
 	size_t ThreadsNum;
+	double TakeSiftDescriptorProb;
 	pthread_mutex_t * extractedSiftStorageLock;
 	cv::Mat * extractedSiftStorage;
 	long unsigned int  * ProcessedImagesCounter;
@@ -148,7 +153,8 @@ void * ExtractSiftsThreadFunc(void * _params) {
 			ExtractDescriptorsToStorage(imgCv,
 					*params->extractedSiftStorage,
 					params->extractedSiftStorageLock,
-					params->ProcessedImagesCounter);
+					params->ProcessedImagesCounter,
+					params->TakeSiftDescriptorProb);
 		} catch (...) {
 			std::cerr << "Error while processing " << imgId << std::endl;
 		}
@@ -157,8 +163,24 @@ void * ExtractSiftsThreadFunc(void * _params) {
 	return NULL;
 }
 
+void WriteCvMatToFile(const cv::Mat & mat, const char * fileName) {
+	std::ofstream fout(fileName);
+
+	fout << mat.rows << "\t" << mat.cols << std::endl;
+	for (size_t rowId = 0; rowId < mat.rows; ++rowId) {
+		for (size_t colId = 0; colId < mat.cols; ++colId) {
+			fout << mat.at<float>(rowId , colId) << "\t";
+		}
+		fout << std::endl;
+	}
+
+}
+
 int main() {
 	const char * fileName = "/Users/asayko/data/grand_challenge/Train/TrainImageSetSmall.tsv";
+	const double takeSiftDescriptorProb = 0.05;
+	const char * outVocabularyFineName = "vocabulary.tsv";
+	const size_t visVocabularySize = 10000;
 	std::ifstream fin(fileName, std::ifstream::in | std::ifstream::binary);
 	fin.seekg(0, std::ifstream::end);
 	size_t fileSize = fin.tellg();
@@ -178,6 +200,7 @@ int main() {
 		siftExtractorThreadParams[i].FileSize = fileSize;
 		siftExtractorThreadParams[i].ThreadNum = i;
 		siftExtractorThreadParams[i].ThreadsNum = NUM_THREADS;
+		siftExtractorThreadParams[i].TakeSiftDescriptorProb = takeSiftDescriptorProb;
 		siftExtractorThreadParams[i].extractedSiftStorageLock = &descriptorsStorageLock;
 		siftExtractorThreadParams[i].extractedSiftStorage = &descriptorsStorage;
 		siftExtractorThreadParams[i].ProcessedImagesCounter = &processedImagesCounter;
@@ -201,17 +224,30 @@ int main() {
                     << descriptorsStorage.rows << " descriptors collected. Clustering..."
                     << std::endl;
 
-    ::cvflann::KMeansIndexParams params(10, 6, cvflann::FLANN_CENTERS_KMEANSPP);
-    cv::Mat clusteringCenters(1100000, 128, CV_32F);
+    //::cvflann::KMeansIndexParams params(10, 6, cvflann::FLANN_CENTERS_KMEANSPP);
+    cv::Mat clusteringCenters(visVocabularySize, 128, CV_32F);
+    cv::Mat clusteringLabels;
+    //int numOfClusters = cv::flann::hierarchicalClustering<cv::flann::L2<float> >(
+    //                descriptorsStorage,
+    //                clusteringCenters,
+    //                params);
+    size_t attemps = 3;
+    double clusteringErr = cv::kmeans(descriptorsStorage,
+    		visVocabularySize,
+    		clusteringLabels,
+    		cv::TermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 10000, 1e-7),
+    		attemps,
+    		cv::KMEANS_PP_CENTERS,
+    		clusteringCenters);
 
-    int numOfClusters = cv::flann::hierarchicalClustering<cv::flann::L2<float> >(
-                    descriptorsStorage,
-                    clusteringCenters,
-                    params);
+    //clusteringCenters = clusteringCenters(cv::Range(0, numOfClusters - 1), cv::Range::all());
 
-    clusteringCenters = clusteringCenters(cv::Range(0, numOfClusters), cv::Range::all());
+    std::cerr << "Clustering done. " << visVocabularySize << " clusters obtained. Writing vocabulary to "
+    		<< outVocabularyFineName << std::endl;
 
-    std::cerr << "Clustering done. " << numOfClusters << " clusters obtained." << std::endl;
+    WriteCvMatToFile(clusteringCenters, outVocabularyFineName);
+
+    std::cerr << "Finished." << std::endl;
 
     return 0;
 }
