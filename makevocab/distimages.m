@@ -6,7 +6,7 @@ Ib = iresize(imread(i2));
 im1 = single(rgb2gray(Ia));
 im2 = single(rgb2gray(Ib));
 
-load('vocab_l216384.mat');
+load('vocabs/vocab_l216384.mat');
 
 kdtree = vl_kdtreebuild(vocab) ;
 [f1, idx1] = hist(im1, kdtree, vocab);
