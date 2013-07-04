@@ -1,8 +1,10 @@
-inpath='d:/toxas/images_jpeg_renamed_dev/'
-outpath='feats_dev/'
-tmp ='tmp_dev/'
-mkdir(tmp);
-calcHistsImpl(inpath, tmp);
+function calcHistsImpl(inpath, featpath, tmp)
+files = [dir([inpath '*.jpg']); dir([inpath '*.png']); dir([inpath '*.jpeg'])];
+
+%%
+parfor i=1:matlabpool('size')
+        vl_setup;
+end
 
 vl_setup
 %%
@@ -12,12 +14,12 @@ kdtree = vl_kdtreebuild(vocab) ;
 %%
 z =  1:16384;
 v = int32(vocab);
+sprintf('compute features');
 parfor i=1:numel(files)
-    i
     histFile = [tmp files(i).name '_hist.mat'];
     if ~exist(histFile, 'file')
         try
-            featureFile = [outpath files(i).name '.mat'];
+            featureFile = [featpath files(i).name '.mat'];
             [f,d] = loadd(featureFile);
             %dd = single(d);
             %[idxs, distance] = vl_kdtreequery(kdtree, vocab, dd);
@@ -30,5 +32,6 @@ parfor i=1:numel(files)
         end
     end;
 end
-%%
+
+end
 
