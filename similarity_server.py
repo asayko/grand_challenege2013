@@ -11,6 +11,7 @@ import codecs
 import itertools
 import base64
 import os
+import sys
 import cgi
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from numpy.oldnumeric.random_array import random
@@ -25,7 +26,8 @@ stop_words = set(stopwords.words('english'))
 images_stop_words = set(['photo', 'pic', 'image', 'picture', 'free', 'video', 'photes', 'pichures', '1024',\
                           'iamges', 'picturers', 'picuters', 'pictires', 'picure', 'imagens', 'picter', '1920x1080', 'imags',\
                            'pcitures', 'imeges', 'pitcures', 'pictrues', 'imges', 'pictuer', 'pictur', 'imiges',\
-                           'picutres', 'imagenes', 'picures', 'pictues','pictuers', 'photography', 'pitures'])
+                           'picutres', 'imagenes', 'picures', 'pictues','pictuers', 'photography', 'pitures',\
+                           'pitcure', 'picftures', 'picitures', 'picters'])
 unigramm_stop_words = set(['2000', '2001', '2002', '2003', '2004', '2005', '2006', '2007', '2008', '2009',\
                             '2010', '2011', '2012', '2013', '2014', 'dr', 'pdf', 'jpeg', 'jpg', 'com', 'www'])
 
@@ -102,7 +104,7 @@ def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
     
     num_lines_processed = 0
     for line in fin.xreadlines():
-        if num_lines_processed % 5000 == 0: print "%d lines processed" % num_lines_processed
+        if num_lines_processed % 5000 == 0: print >> sys.stderr,  "%d lines processed" % num_lines_processed
         line_parts = line.split("\t")
         img_id = line_parts[0].strip()
         query = line_parts[1].strip()
@@ -114,7 +116,7 @@ def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
             if lemma in unigramm_stop_words: continue
             unigramm = "%s" % lemma
             #PutToIndex(unigramm_index, unigramm, img_id)
-            PutToIndex(img_index, escape_image_id_to_be_valid_filename(img_id), lemma)
+            PutToIndex(img_index, img_id, lemma)
         
         """
         for bigramm in itertools.combinations(query_lemmas, 2):
@@ -289,7 +291,7 @@ if __name__ == '__main__':
     unigramm_index, bigramm_index, trigramm_index, img_index = ParseClickLogAndCreateNGrammsIndexes(click_log_file)
     
     for key in img_index.keys():
-        print "%s\t%d\t%s" % (key, len(img_index[key]), str(img_index[key]))
+        print "%s\t%s.jpeg\s%d\t%s" % (key, escape_image_id_to_be_valid_filename(key), len(img_index[key]), str(img_index[key]))
 
 '''
     try:
