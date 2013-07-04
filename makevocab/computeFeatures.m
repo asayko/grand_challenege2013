@@ -1,6 +1,7 @@
 function ComputeFeatures
-inpath='d:/toxas/images_jpeg_renamed/'
-outpath='feats/'
+inpath='d:/toxas/images_jpeg_renamed_dev/'
+outpath='feats_dev/'
+mkdir(outpath)
 
 files = [dir([inpath '*.jpg']); dir([inpath '*.png']); dir([inpath '*.jpeg'])];
 
