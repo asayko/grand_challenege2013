@@ -20,16 +20,16 @@ for i=0:topN
 
 end
 
-curGroup = 0;
+curGroup = 1;
 groups = {};
 isDup = 0;
 for i=0:topN
     isDup = 0;
    for j=0:i-1
        score = histRawDist(hists{i+1}, hists{j+1});
-       fprintf(fout_debug, '%d.jpg,%d.jpg,%1.3f,%d\n', i, j, score, sum(hists{j+1}));
+       fprintf(fout_debug, '%d.jpg,%d.jpg,%1.3f,%d\n', i, j, score, sum(hists{j+1}>0));
   
-       if (score > 0.4) && (sum(hists{j+1} > 0) > 40) && (sum(hists{i+1} > 0) > 30)
+       if (score > thr) && (sum(hists{j+1} > 0) > 20) && (sum(hists{i+1} > 0) > 20)
            isDup = 1;
            fprintf(fout, '1\t%d\n', groups{j+1});
            groups{i+1} = groups{j + 1};

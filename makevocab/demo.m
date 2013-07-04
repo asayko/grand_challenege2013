@@ -1,7 +1,7 @@
 run('/Users/slesarev/vlfeat-0.9.14/toolbox/vl_setup.m')
 
-Ia = iresize(imread('~/semidups-20130625-171944/results/semidups-000.workd/thumbnails-prod/45/1.jpg'));
-Ib = iresize(imread('~/semidups-20130625-171944/results/semidups-000.workd/thumbnails-prod/45/18.jpg'));
+Ia = iresize(imread('~/semidups-20130625-171944/results/semidups-000.workd/thumbnails-prod/18/1.jpg'));
+Ib = iresize(imread('~/semidups-20130625-171944/results/semidups-000.workd/thumbnails-prod/18/0.jpg'));
 
 
 %Ia = iresize(imread('imgs/f1.jpeg'));
@@ -27,7 +27,7 @@ im1 = single(rgb2gray(Ia));
 im2 = single(rgb2gray(Ib));
 
 load('vocabs/vocab_l216384.mat');
-load('vocabs/vocab_l232768.mat');
+%load('vocabs/vocab_l232768.mat');
 
 kdtree = vl_kdtreebuild(vocab) ;
 [f1, idx1] = histFromImage(im1, kdtree, vocab);
