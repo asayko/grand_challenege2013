@@ -1,6 +1,7 @@
-inpath='d:/toxas/images_jpeg_renamed/'
-outpath='feats/'
-tmp ='tmp/'
+inpath='d:/toxas/images_jpeg_renamed_dev/'
+outpath='feats_dev/'
+tmp ='tmp_dev/'
+mkdir(tmp);
 
 files = [dir([inpath '*.jpeg'])];
 %%
@@ -34,3 +35,5 @@ parfor i=1:numel(files)
         end
     end;
 end
+%%
+
