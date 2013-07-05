@@ -14,19 +14,25 @@ kdtree = vl_kdtreebuild(vocab) ;
 z =  1:size(vocab,2);
 v = int32(vocab);
 vsize = size(vocab, 2);
-sprintf('compute features');
+sprintf('compute hists')
+mkdir(tmp);
 parfor i=1:numel(files)
     histFile = [tmp files(i).name '_hist_' int2str(vsize) '.mat'];
-    if ~exist(histFile, 'file')
+    idxsFile = [tmp files(i).name '_idxs_' int2str(vsize) '.mat'];
+    fFile = [tmp files(i).name '_f_' int2str(vsize) '.mat'];
+    i
+    if ~exist(idxsFile, 'file')
         try
             featureFile = [featpath files(i).name '.mat'];
             [f,d] = loadd(featureFile);
             %dd = single(d);
             %[idxs, distance] = vl_kdtreequery(kdtree, vocab, dd);
             idxs =  vl_ikmeanspush(d,v);
-            hist = histc(idxs, z);
+            fakeSave(idxsFile, idxs);
+            fakeSave(fFile, f);
+            %hist = histc(idxs, z);
     
-            fakeSave(histFile, hist);
+            %fakeSave(histFile, hist);
         catch exc
            %do nothing
         end
