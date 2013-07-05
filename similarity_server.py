@@ -14,15 +14,30 @@ import os
 import sys
 import cgi
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-from numpy.oldnumeric.random_array import random
-
-PORT_NUMBER = 8080
-
+from compiler.ast import Print
 wnl = nltk.WordNetLemmatizer()
 enchant.set_param('enchant.myspell.dictionary.path',\
                    '/opt/local/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages/enchant/share/enchant/myspell/')
-click_log_file = "/Users/asayko/data/grand_challenge/Train/TrainClickLog.tsv"
+PORT_NUMBER = 8080
+
+QUERY_LEMMA_MATCH = 1
+QUERY_SYNSET_MATCH = 2
+
+click_log_file = "/Users/asayko/data/grand_challenge/Train/TrainClickLog10K.tsv"
+click_images_dir = "/Users/asayko/data/grand_challenge/Train/images_jpeg_renamed/"
+
+
+dont_load_unigramms_for_img_ids_file = "/Users/asayko/workspace/grand2013challenge/dont_load_unigramms_for_pics.txt"
+dont_load_unigramms_for_img_ids = set([t.strip() for t in codecs.open(dont_load_unigramms_for_img_ids_file, "r", "utf-8")])
+
+dont_load_bigramms_for_img_ids_file = "/Users/asayko/workspace/grand2013challenge/dont_load_bigramms_for_pics.txt"
+dont_load_bigramms_for_img_ids = set([t.strip() for t in codecs.open(dont_load_bigramms_for_img_ids_file, "r", "utf-8")])
+
+dont_load_trigramms_for_img_ids_file = "/Users/asayko/workspace/grand2013challenge/dont_load_trigramms_for_pics.txt"
+dont_load_trigramms_for_img_ids = set([t.strip() for t in codecs.open(dont_load_trigramms_for_img_ids_file, "r", "utf-8")])
+
 stop_words = set(stopwords.words('english'))
+
 images_stop_words = set(['photo', 'pic', 'image', 'picture', 'free', 'video', 'photes', 'pichures', '1024',\
                           'iamges', 'picturers', 'picuters', 'pictires', 'picure', 'imagens', 'picter', '1920x1080', 'imags',\
                            'pcitures', 'imeges', 'pitcures', 'pictrues', 'imges', 'pictuer', 'pictur', 'imiges',\
@@ -33,12 +48,27 @@ unigramm_stop_words = set(['2000', '2001', '2002', '2003', '2004', '2005', '2006
 
 class MyHandler(BaseHTTPRequestHandler):
     
+    def PrintOutInputForm(self):
+        self.wfile.write("<br/>")
+        self.wfile.write("<form action=\"imagerank\" method=\"post\">")
+        self.wfile.write("Run id: <input type=\"text\" name=\"runID\"/> <br/>")
+        self.wfile.write("Query: <input type=\"text\" name=\"query\"/> <br/>")
+        self.wfile.write("Image: <input type=\"text\" name=\"image\"/> <br/>")
+        self.wfile.write("<input type=\"submit\" value=\"submit\"> <br/>")
+        self.wfile.write("</form>")
+        self.wfile.write("<br/>")
+        return
+ 
     def do_GET(self):
         
         if self.path.startswith("/imageget/"):
+            self.send_response(200)
+            self.send_header('Content-type','image/jpeg')
+            self.end_headers()
+            
             path_parts = self.path.split("/")
-            file_name = path_parts[-1]
-            f = open("/Users/asayko/data/grand_challenge/Train/images_jpeg_renamed/" + file_name, 'rb')
+            img_id = path_parts[-1]
+            f = open("%s%s.jpeg" % (click_images_dir, img_id) , 'rb')
             self.wfile.write(f.read())
             return
         
@@ -46,16 +76,8 @@ class MyHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type','text/html')
         self.end_headers()
         
-        self.wfile.write("<html><body>")
-        self.wfile.write("<form action=\"imagerank\" method=\"post\">")
-        
-        self.wfile.write("Run id: <input type=\"text\" name=\"runID\"/> <br/>")
-        self.wfile.write("Query: <input type=\"text\" name=\"query\"/> <br/>")
-        self.wfile.write("Image: <input type=\"text\" name=\"image\"/> <br/>")
-        
-        self.wfile.write("<input type=\"submit\" value=\"submit\"> <br/>")
-        
-        self.wfile.write("</form>")
+        self.wfile.write("<html><body>")   
+        self.PrintOutInputForm()
         self.wfile.write("</body></html>")
         return
     
@@ -69,15 +91,18 @@ class MyHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type','text/html')
         self.end_headers()
-        
+        self.wfile.write("<html><body>")
         if self.path == "/imagerank":
-            if not form.has_key("runID") or not form.has_key("query") or not form.has_key("image"):
+            #if not form.has_key("runID") or not form.has_key("query") or not form.has_key("image"):
+            if not form.has_key("query"):
                 self.wfile.write("Missing required parameter.")
             else:
                 query = form.getvalue("query", "default")
                 image = form.getvalue("image", "default")
                 relev = CalcImageRelevance(self.wfile, query, image)
-                #self.wfile.write(relev)
+                self.wfile.write(relev)
+        self.PrintOutInputForm()
+        self.wfile.write("</body></html>")
         return
 
 def escape_image_id_to_be_valid_filename(image_id):
@@ -99,9 +124,7 @@ def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
     unigramm_index = {}
     bigramm_index = {}
     trigramm_index = {}
-    
-    img_index = {}
-    
+      
     num_lines_processed = 0
     for line in fin.xreadlines():
         if num_lines_processed % 5000 == 0: print >> sys.stderr,  "%d lines processed" % num_lines_processed
@@ -112,26 +135,26 @@ def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
     
         query_lemmas = GetLemmas(query)
 
-        for lemma in query_lemmas:
-            if lemma in unigramm_stop_words: continue
-            unigramm = "%s" % lemma
-            #PutToIndex(unigramm_index, unigramm, img_id)
-            PutToIndex(img_index, img_id, lemma)
-        
-        """
-        for bigramm in itertools.combinations(query_lemmas, 2):
-            b = sorted(bigramm)
-            bigramm = "%s %s" % (b[0], b[1])
-            PutToIndex(bigramm_index, bigramm, img_id)
+        if img_id not in dont_load_unigramms_for_img_ids:
+            for lemma in query_lemmas:
+                if lemma in unigramm_stop_words: continue
+                unigramm = "%s" % lemma
+                PutToIndex(unigramm_index, unigramm, img_id)
 
-        for trigramm in itertools.combinations(query_lemmas, 3):
-            t = sorted(trigramm)
-            trigramm = "%s %s %s" % (t[0], t[1], t[2])
-            PutToIndex(trigramm_index, trigramm, img_id)
-        """         
+        if img_id not in dont_load_bigramms_for_img_ids:
+            for bigramm in itertools.combinations(query_lemmas, 2):
+                b = sorted(bigramm)
+                bigramm = "%s %s" % (b[0], b[1])
+                PutToIndex(bigramm_index, bigramm, img_id)
+        
+        if img_id not in dont_load_trigramms_for_img_ids:
+            for trigramm in itertools.combinations(query_lemmas, 3):
+                t = sorted(trigramm)
+                trigramm = "%s %s %s" % (t[0], t[1], t[2])
+                PutToIndex(trigramm_index, trigramm, img_id)    
         num_lines_processed = num_lines_processed + 1
     
-    return unigramm_index, bigramm_index, trigramm_index, img_index
+    return unigramm_index, bigramm_index, trigramm_index
 
 def GetLemmas(query):
     query_tokens = nltk.word_tokenize(query)
@@ -150,14 +173,15 @@ def ExpandLemma(lemma):
     for s in wn.synsets(lemma):
         for l in s.lemma_names:
             expanded_lemmas.add(l)
+    if lemma in expanded_lemmas: expanded_lemmas.remove(lemma)
     return expanded_lemmas
 
 def ExpandUnigramms(query_lemmas, expanded_lemmas):
     unigramms_to_analyze = []
     for lemma in query_lemmas:
-        unigramms_to_analyze.append((lemma, 1.0))
+        unigramms_to_analyze.append((lemma, QUERY_LEMMA_MATCH))
         for expanded_lemma in expanded_lemmas[lemma]:
-            unigramms_to_analyze.append((expanded_lemma, 0.1))
+            unigramms_to_analyze.append((expanded_lemma, QUERY_SYNSET_MATCH))
     return unigramms_to_analyze
 
 def ExpandBigramms(query_lemmas, expanded_lemmas):
@@ -165,7 +189,7 @@ def ExpandBigramms(query_lemmas, expanded_lemmas):
     for b in itertools.combinations(query_lemmas, 2):
         bigramm = sorted(b)
         bigramm_text = "%s %s" % (bigramm[0], bigramm[1])
-        bigramms_to_analyze.append((bigramm_text, 2.0))
+        bigramms_to_analyze.append((bigramm_text, QUERY_LEMMA_MATCH))
         
         lemmas_first_expanded = expanded_lemmas[bigramm[0]]
         lemmas_second_expanded = expanded_lemmas[bigramm[1]]
@@ -173,7 +197,7 @@ def ExpandBigramms(query_lemmas, expanded_lemmas):
         for (le1, le2) in itertools.product(lemmas_first_expanded, lemmas_second_expanded):
              be = sorted([le1, le2])
              be_text = "%s %s" % (be[0], be[1])
-             bigramms_to_analyze.append((be_text, 0.2))
+             bigramms_to_analyze.append((be_text, QUERY_SYNSET_MATCH))
     return bigramms_to_analyze
 
 def ExpandTrigramms(query_lemmas, expanded_lemmas):
@@ -181,7 +205,7 @@ def ExpandTrigramms(query_lemmas, expanded_lemmas):
     for t in itertools.combinations(query_lemmas, 3):
         trigramm = sorted([t[0], t[1], t[2]])
         trigramm_text = "%s %s %s" % (trigramm[0], trigramm[1], trigramm[2])
-        trigramms_to_analyze.append((trigramm_text, 3.0))
+        trigramms_to_analyze.append((trigramm_text, QUERY_LEMMA_MATCH))
 
         lemmas_first_expanded = expanded_lemmas[trigramm[0]]
         lemmas_second_expanded = expanded_lemmas[trigramm[1]]
@@ -190,11 +214,52 @@ def ExpandTrigramms(query_lemmas, expanded_lemmas):
         for (le1, le2, le3) in itertools.product(lemmas_first_expanded, lemmas_second_expanded, lemmas_third_expanded):
             te = sorted([le1, le2, le3])
             te_text = "%s %s %s" % (te[0], te[1], te[2])
-            trigramms_to_analyze.append((te_text, 0.3))
+            trigramms_to_analyze.append((te_text, QUERY_SYNSET_MATCH))
     return trigramms_to_analyze
 
+def PutToDicts(ngramm, pic, ngramm_to_pics, pics_to_ngramm):
+    if pic in pics_to_ngramm:
+        pics_to_ngramm[pic].add(ngramm)
+    else:
+        pics_to_ngramm[pic] = set()
+        pics_to_ngramm[pic].add(ngramm)
+        
+    if ngramm in ngramm_to_pics:
+        ngramm_to_pics[ngramm].add(pic)
+    else:
+        ngramm_to_pics[ngramm] = set()
+        ngramm_to_pics[ngramm].add(pic)
+
+def CreateDicts(ngramms_in_index):
+    lemma_ngramm_to_pics = {}
+    lemma_pics_to_ngramm = {}
+    synset_ngramm_to_pics = {}
+    synset_pics_to_ngramm = {}
+    
+    for (ngramm, match_type, pics) in ngramms_in_index:
+        if match_type == QUERY_LEMMA_MATCH:
+            for pic in pics:
+                PutToDicts(ngramm, pic, lemma_ngramm_to_pics, lemma_pics_to_ngramm)
+        elif match_type == QUERY_SYNSET_MATCH:
+            for pic in pics:
+                PutToDicts(ngramm, pic, synset_ngramm_to_pics, synset_pics_to_ngramm)
+                
+    return lemma_ngramm_to_pics, lemma_pics_to_ngramm, synset_ngramm_to_pics, synset_pics_to_ngramm
+
+def DrawPics(out, caption, pics_to_ngramms):
+    out.write("<p>")
+    out.write("<h1>%s</h1>" % caption)
+    out.write("<table><tr>")
+    for pic in pics_to_ngramms.keys():
+        out.write("<td><img src=\"imageget/%s\"></td>" % escape_image_id_to_be_valid_filename(pic))
+        out.write("<td>%d %s</td>" % (len(pics_to_ngramms[pic]), str(pics_to_ngramms[pic])))
+    out.write("</tr></table>")
+
+
 def CalcImageRelevance(out, query, image):
+            
     query_lemmas = GetLemmas(query)
+    out.write("<table><tr><td>%s</td><td>%s</td></tr></table><br/>" % ("query lemmas", str(query_lemmas)))
     
     expanded_lemmas = {}
     for lemma in query_lemmas:
@@ -203,84 +268,33 @@ def CalcImageRelevance(out, query, image):
     unigramms_to_analyze = ExpandUnigramms(query_lemmas, expanded_lemmas)
     bigramms_to_analyze = ExpandBigramms(query_lemmas, expanded_lemmas)    
     trigramms_to_analyze = ExpandTrigramms(query_lemmas, expanded_lemmas)
-    
-    out.write("<html><body>\n")        
-    out.write("\n")
-    out.write(unigramms_to_analyze)
-    out.write("\n")
 
-    out.write("\n")
-    out.write(bigramms_to_analyze)
-    out.write("\n")
+    unigramms_in_index = [(unigramm, match_type, unigramm_index[unigramm]) for (unigramm, match_type) in unigramms_to_analyze if unigramm in unigramm_index]
+    bigramms_in_index = [(bigramm, match_type, bigramm_index[bigramm]) for (bigramm, match_type) in bigramms_to_analyze if bigramm in bigramm_index]
+    trigramms_in_index = [(trigramm, match_type, trigramm_index[trigramm]) for (trigramm, match_type) in trigramms_to_analyze if trigramm in trigramm_index]
+    
+    lemma_unigramm_to_pics, lemma_pics_to_unigramm, synset_unigramm_to_pics, synset_pics_to_unigramm =\
+        CreateDicts(unigramms_in_index)
+        
+    lemma_bigramm_to_pics, lemma_pics_to_bigramm, synset_bigramm_to_pics, synset_pics_to_bigramm =\
+        CreateDicts(bigramms_in_index)
 
-    out.write("\n")
-    out.write(trigramms_to_analyze)
-    out.write("\n")
-    
-    relevant_weighted_pics = {}
-    relevant_weighted_pics_ngrams = {}
-    
-    for (unigramm, weight) in unigramms_to_analyze:
-        if unigramm in unigramm_index:
-            out.write("%s in index\n" % unigramm)
-            unigramm_pics = unigramm_index[unigramm]
-            out.write(unigramm_pics)
-            out.write("\n")
-            for pic in unigramm_pics:
-                if pic in relevant_weighted_pics:
-                    relevant_weighted_pics[pic] = relevant_weighted_pics[pic] + weight
-                    relevant_weighted_pics_ngrams[pic].add(unigramm)
-                else:
-                    relevant_weighted_pics[pic] = weight
-                    relevant_weighted_pics_ngrams[pic] = set()
-                    relevant_weighted_pics_ngrams[pic].add(unigramm)
+    lemma_trigramm_to_pics, lemma_pics_to_trigramm, synset_trigramm_to_pics, synset_pics_to_trigramm =\
+        CreateDicts(trigramms_in_index)
 
-    for (bigramm, weight) in bigramms_to_analyze:
-        if bigramm in bigramm_index:
-            out.write("%s in index\n" % bigramm)
-            bigramm_pics = bigramm_index[bigramm]
-            out.write(bigramm_pics)
-            out.write("\n")
-            for pic in bigramm_pics:
-                if pic in relevant_weighted_pics:
-                    relevant_weighted_pics[pic] = relevant_weighted_pics[pic] + weight
-                    relevant_weighted_pics_ngrams[pic].add(bigramm)
-                else:
-                    relevant_weighted_pics[pic] = weight
-                    relevant_weighted_pics_ngrams[pic] = set()
-                    relevant_weighted_pics_ngrams[pic].add(bigramm)
-                    
-    for (trigramm, weight) in trigramms_to_analyze:
-        if trigramm in trigramm_index:
-            out.write("%s in index\n" % trigramm)
-            trigramm_pics = trigramm_index[trigramm]
-            out.write(trigramm_pics)
-            out.write("\n")
-            for pic in trigramm_pics:
-                if pic in relevant_weighted_pics:
-                    relevant_weighted_pics[pic] = relevant_weighted_pics[pic] + weight
-                    relevant_weighted_pics_ngrams[pic].add(trigramm)
-                else:
-                    relevant_weighted_pics[pic] = weight
-                    relevant_weighted_pics_ngrams[pic] = set()
-                    relevant_weighted_pics_ngrams[pic].add(trigramm)
+
+    DrawPics(out, "Matching by unigramm lemma.", lemma_pics_to_unigramm)
+    DrawPics(out, "Matching by unigramm synset lemmas.", synset_pics_to_unigramm)
+
+    DrawPics(out, "Matching by bigramm lemma.", lemma_pics_to_bigramm)
+    DrawPics(out, "Matching by bigramm synset lemmas.", synset_pics_to_bigramm)
+
+    DrawPics(out, "Matching by trigramm lemma.", lemma_pics_to_trigramm)
+    DrawPics(out, "Matching by trigramm synset lemmas.", synset_pics_to_trigramm)
     
-    out.write("<br>")
-    out.write("\nweighted pics\n")
-    out.write("<br>")
-    out.write("<br>")
-    out.write("<br>")
-    for pic in relevant_weighted_pics.keys():
-        out.write("pic: %s pic_name: %s weight: %lf\n" % (pic, escape_image_id_to_be_valid_filename(pic), relevant_weighted_pics[pic]))
-        out.write("<br>")
-        out.write("words: %s" % str(relevant_weighted_pics_ngrams[pic]))
-        out.write("<br>")
-        out.write("<img src=\"%s\"/>" % ("imageget/" + escape_image_id_to_be_valid_filename(pic) + ".jpeg"))
-        out.write("<br>")
-        out.write("\n")
-    out.write("\n")
-    out.write("<br>")
-    out.write("</body></html>\n")
+    out.write("</p>")
+
+    
     return np.random.randn()
 
 if __name__ == '__main__':
@@ -288,12 +302,8 @@ if __name__ == '__main__':
     global bigramm_index
     global trigramm_index
     global img_index
-    unigramm_index, bigramm_index, trigramm_index, img_index = ParseClickLogAndCreateNGrammsIndexes(click_log_file)
+    unigramm_index, bigramm_index, trigramm_index = ParseClickLogAndCreateNGrammsIndexes(click_log_file)
     
-    for key in img_index.keys():
-        print "%s\t%s.jpeg\s%d\t%s" % (key, escape_image_id_to_be_valid_filename(key), len(img_index[key]), str(img_index[key]))
-
-'''
     try:
         server = HTTPServer(('', PORT_NUMBER), MyHandler)
         print 'Started httpserver on port ' , PORT_NUMBER
@@ -301,4 +311,3 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print '^C received, shutting down the web server'
         server.socket.close()
-'''
