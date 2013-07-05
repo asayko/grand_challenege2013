@@ -22,8 +22,9 @@ PORT_NUMBER = 8080
 
 QUERY_LEMMA_MATCH = 1
 QUERY_SYNSET_MATCH = 2
+QUERY_LEMMA_SYNSET_MATCH = 3
 
-click_log_file = "/Users/asayko/data/grand_challenge/Train/TrainClickLog10K.tsv"
+click_log_file = "/Users/asayko/data/grand_challenge/Train/TrainClickLog100K.tsv"
 click_images_dir = "/Users/asayko/data/grand_challenge/Train/images_jpeg_renamed/"
 
 
@@ -165,7 +166,7 @@ def GetLemmas(query):
         if lemma in images_stop_words: continue
         if not lemma.isalnum(): continue
         if not is_ascii(lemma): continue
-        query_lemmas.append(lemma)
+        query_lemmas.append(lemma.lower())
     return query_lemmas
 
 def ExpandLemma(lemma):
@@ -194,6 +195,16 @@ def ExpandBigramms(query_lemmas, expanded_lemmas):
         lemmas_first_expanded = expanded_lemmas[bigramm[0]]
         lemmas_second_expanded = expanded_lemmas[bigramm[1]]
         
+        for (bi1, le2) in itertools.product([bigramm[0]], lemmas_second_expanded):
+             be = sorted([bi1, le2])
+             be_text = "%s %s" % (be[0], be[1])
+             bigramms_to_analyze.append((be_text, QUERY_LEMMA_SYNSET_MATCH))
+             
+        for (le1, bi2) in itertools.product(lemmas_first_expanded, [bigramm[1]]):
+             be = sorted([le1, bi2])
+             be_text = "%s %s" % (be[0], be[1])
+             bigramms_to_analyze.append((be_text, QUERY_LEMMA_SYNSET_MATCH))
+
         for (le1, le2) in itertools.product(lemmas_first_expanded, lemmas_second_expanded):
              be = sorted([le1, le2])
              be_text = "%s %s" % (be[0], be[1])
@@ -211,10 +222,41 @@ def ExpandTrigramms(query_lemmas, expanded_lemmas):
         lemmas_second_expanded = expanded_lemmas[trigramm[1]]
         lemmas_third_expanded = expanded_lemmas[trigramm[2]]
 
+        for (le1, le2, le3) in itertools.product([trigramm[0]], lemmas_second_expanded, lemmas_third_expanded):
+            te = sorted([le1, le2, le3])
+            te_text = "%s %s %s" % (te[0], te[1], te[2])
+            trigramms_to_analyze.append((te_text, QUERY_LEMMA_SYNSET_MATCH))
+
+        for (le1, le2, le3) in itertools.product(lemmas_first_expanded, [trigramm[1]], lemmas_third_expanded):
+            te = sorted([le1, le2, le3])
+            te_text = "%s %s %s" % (te[0], te[1], te[2])
+            trigramms_to_analyze.append((te_text, QUERY_LEMMA_SYNSET_MATCH))
+
+        for (le1, le2, le3) in itertools.product(lemmas_first_expanded, lemmas_second_expanded, [trigramm[2]]):
+            te = sorted([le1, le2, le3])
+            te_text = "%s %s %s" % (te[0], te[1], te[2])
+            trigramms_to_analyze.append((te_text, QUERY_LEMMA_SYNSET_MATCH))
+
+        for (le1, le2, le3) in itertools.product([trigramm[0]], [trigramm[1]], lemmas_third_expanded):
+            te = sorted([le1, le2, le3])
+            te_text = "%s %s %s" % (te[0], te[1], te[2])
+            trigramms_to_analyze.append((te_text, QUERY_LEMMA_SYNSET_MATCH))
+
+        for (le1, le2, le3) in itertools.product([trigramm[0]], lemmas_second_expanded, [trigramm[2]]):
+            te = sorted([le1, le2, le3])
+            te_text = "%s %s %s" % (te[0], te[1], te[2])
+            trigramms_to_analyze.append((te_text, QUERY_LEMMA_SYNSET_MATCH))
+
+        for (le1, le2, le3) in itertools.product(lemmas_first_expanded, [trigramm[1]], [trigramm[2]]):
+            te = sorted([le1, le2, le3])
+            te_text = "%s %s %s" % (te[0], te[1], te[2])
+            trigramms_to_analyze.append((te_text, QUERY_LEMMA_SYNSET_MATCH))
+
         for (le1, le2, le3) in itertools.product(lemmas_first_expanded, lemmas_second_expanded, lemmas_third_expanded):
             te = sorted([le1, le2, le3])
             te_text = "%s %s %s" % (te[0], te[1], te[2])
             trigramms_to_analyze.append((te_text, QUERY_SYNSET_MATCH))
+            
     return trigramms_to_analyze
 
 def PutToDicts(ngramm, pic, ngramm_to_pics, pics_to_ngramm):
@@ -235,6 +277,9 @@ def CreateDicts(ngramms_in_index):
     lemma_pics_to_ngramm = {}
     synset_ngramm_to_pics = {}
     synset_pics_to_ngramm = {}
+    lemma_synset_ngramm_to_pics = {}
+    lemma_synset_pics_to_ngramm = {}
+
     
     for (ngramm, match_type, pics) in ngramms_in_index:
         if match_type == QUERY_LEMMA_MATCH:
@@ -243,8 +288,14 @@ def CreateDicts(ngramms_in_index):
         elif match_type == QUERY_SYNSET_MATCH:
             for pic in pics:
                 PutToDicts(ngramm, pic, synset_ngramm_to_pics, synset_pics_to_ngramm)
+        elif match_type == QUERY_LEMMA_SYNSET_MATCH:
+            for pic in pics:
+                PutToDicts(ngramm, pic, lemma_synset_ngramm_to_pics, lemma_synset_pics_to_ngramm)
+
                 
-    return lemma_ngramm_to_pics, lemma_pics_to_ngramm, synset_ngramm_to_pics, synset_pics_to_ngramm
+    return lemma_ngramm_to_pics, lemma_pics_to_ngramm,\
+         synset_ngramm_to_pics, synset_pics_to_ngramm,\
+         lemma_synset_ngramm_to_pics, lemma_synset_pics_to_ngramm
 
 def DrawPics(out, caption, pics_to_ngramms):
     out.write("<p>")
@@ -254,7 +305,6 @@ def DrawPics(out, caption, pics_to_ngramms):
         out.write("<td><img src=\"imageget/%s\"></td>" % escape_image_id_to_be_valid_filename(pic))
         out.write("<td>%d %s</td>" % (len(pics_to_ngramms[pic]), str(pics_to_ngramms[pic])))
     out.write("</tr></table>")
-
 
 def CalcImageRelevance(out, query, image):
             
@@ -273,24 +323,32 @@ def CalcImageRelevance(out, query, image):
     bigramms_in_index = [(bigramm, match_type, bigramm_index[bigramm]) for (bigramm, match_type) in bigramms_to_analyze if bigramm in bigramm_index]
     trigramms_in_index = [(trigramm, match_type, trigramm_index[trigramm]) for (trigramm, match_type) in trigramms_to_analyze if trigramm in trigramm_index]
     
-    lemma_unigramm_to_pics, lemma_pics_to_unigramm, synset_unigramm_to_pics, synset_pics_to_unigramm =\
+    lemma_unigramm_to_pics, lemma_pics_to_unigramm,\
+    synset_unigramm_to_pics, synset_pics_to_unigramm,\
+    lemma_synset_unigramm_to_pics, lemma_synset_pics_to_unigramm =\
         CreateDicts(unigramms_in_index)
         
-    lemma_bigramm_to_pics, lemma_pics_to_bigramm, synset_bigramm_to_pics, synset_pics_to_bigramm =\
+    lemma_bigramm_to_pics, lemma_pics_to_bigramm,\
+    synset_bigramm_to_pics, synset_pics_to_bigramm,\
+    lemma_synset_bigramm_to_pics, lemma_synset_pics_to_bigramm =\
         CreateDicts(bigramms_in_index)
 
-    lemma_trigramm_to_pics, lemma_pics_to_trigramm, synset_trigramm_to_pics, synset_pics_to_trigramm =\
+    lemma_trigramm_to_pics, lemma_pics_to_trigramm,\
+    synset_trigramm_to_pics, synset_pics_to_trigramm,\
+    lemma_synset_trigramm_to_pics, lemma_synset_pics_to_trigramm =\
         CreateDicts(trigramms_in_index)
 
 
     DrawPics(out, "Matching by unigramm lemma.", lemma_pics_to_unigramm)
-    DrawPics(out, "Matching by unigramm synset lemmas.", synset_pics_to_unigramm)
+    DrawPics(out, "Matching by unigramm synsetlemma.", synset_pics_to_unigramm)
 
     DrawPics(out, "Matching by bigramm lemma.", lemma_pics_to_bigramm)
-    DrawPics(out, "Matching by bigramm synset lemmas.", synset_pics_to_bigramm)
+    DrawPics(out, "Matching by bigramm lemma_synsetlemma.", lemma_synset_pics_to_bigramm)
+    DrawPics(out, "Matching by bigramm synsetlemma.", synset_pics_to_bigramm)
 
     DrawPics(out, "Matching by trigramm lemma.", lemma_pics_to_trigramm)
-    DrawPics(out, "Matching by trigramm synset lemmas.", synset_pics_to_trigramm)
+    DrawPics(out, "Matching by trigramm lemma_synsetlemma.", lemma_synset_pics_to_trigramm)
+    DrawPics(out, "Matching by trigramm synsetlemma.", synset_pics_to_trigramm)
     
     out.write("</p>")
 
