@@ -14,7 +14,6 @@ import os
 import sys
 import cgi
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-from numpy.oldnumeric.random_array import random
 
 PORT_NUMBER = 8080
 
@@ -112,18 +111,20 @@ def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
     
         query_lemmas = GetLemmas(query)
 
+        """
         for lemma in query_lemmas:
             if lemma in unigramm_stop_words: continue
             unigramm = "%s" % lemma
             #PutToIndex(unigramm_index, unigramm, img_id)
-            PutToIndex(img_index, img_id, lemma)
-        
         """
+
         for bigramm in itertools.combinations(query_lemmas, 2):
             b = sorted(bigramm)
             bigramm = "%s %s" % (b[0], b[1])
-            PutToIndex(bigramm_index, bigramm, img_id)
+            #PutToIndex(bigramm_index, bigramm, img_id)
+            PutToIndex(img_index, img_id, bigramm)
 
+        """
         for trigramm in itertools.combinations(query_lemmas, 3):
             t = sorted(trigramm)
             trigramm = "%s %s %s" % (t[0], t[1], t[2])
@@ -291,7 +292,7 @@ if __name__ == '__main__':
     unigramm_index, bigramm_index, trigramm_index, img_index = ParseClickLogAndCreateNGrammsIndexes(click_log_file)
     
     for key in img_index.keys():
-        print "%s\t%s.jpeg\s%d\t%s" % (key, escape_image_id_to_be_valid_filename(key), len(img_index[key]), str(img_index[key]))
+        print "%s\t%s.jpeg\t%d\t%s" % (key, escape_image_id_to_be_valid_filename(key), len(img_index[key]), str(img_index[key]))
 
 '''
     try:
