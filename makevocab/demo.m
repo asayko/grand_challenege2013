@@ -1,12 +1,19 @@
 run('/Users/slesarev/vlfeat-0.9.14/toolbox/vl_setup.m')
 
-Ia = iresize(imread('~/semidups-20130625-171944/results/semidups-000.workd/thumbnails-prod/18/1.jpg'));
-Ib = iresize(imread('~/semidups-20130625-171944/results/semidups-000.workd/thumbnails-prod/18/0.jpg'));
+%Ia = iresize(imread('~/semidups-20130625-171944/results/semidups-000.workd/thumbnails-prod/18/1.jpg'));
+%Ib = iresize(imread('~/semidups-20130625-171944/results/semidups-000.workd/thumbnails-prod/18/0.jpg'));
 
 
+inpath = '~/grand_challenege2013/images_jpeg_renamed_dev/';
+q1 = 'aW1nMjA4MDE=.jpeg';
+q2 = 'aW1nMjgwNDg=.jpeg';
+q3 = 'aW1nMjE2ODk=.jpeg';
+Ia = iresize(imread([inpath q1]));
+Ib = iresize(imread([inpath q3]));
 %Ia = iresize(imread('imgs/f1.jpeg'));
 %Ib = iresize(imread('imgs/f2.jpeg'));
 
+dist2 = scoreRansac('imgs/f1.jpeg', 'imgs/f2.jpeg')
 %distimages('imgs/f1.jpeg', 'imgs/f2.jpeg')
 %distimages('imgs/f2.jpeg', 'imgs/f3.jpeg')
 %distimages('imgs/g1.jpeg', 'imgs/i4.jpeg')
@@ -26,22 +33,24 @@ Ib = iresize(imread('~/semidups-20130625-171944/results/semidups-000.workd/thumb
 im1 = single(rgb2gray(Ia));
 im2 = single(rgb2gray(Ib));
 
-load('vocabs/vocab_l216384.mat');
-%load('vocabs/vocab_l232768.mat');
+%load('vocabs/vocab_l216384.mat');
+load('vocabs/vocab_l232768.mat');
 
 kdtree = vl_kdtreebuild(vocab) ;
 [f1, idx1] = histFromImage(im1, kdtree, vocab);
 [f2, idx2] = histFromImage(im2, kdtree, vocab);
+
 [l r]=find(bsxfun(@eq,idx1,idx2')');
 
 dist = histDist(idx1, idx2, size(vocab,2));
 dist
+
 sum(idx1>0)
 sum(idx2>0)
 sum((histc(idx1,1:size(vocab,2))>0).*(histc(idx2,1:size(vocab,2))>0))
 
 figure(1) ; clf ;
-imagesc(cat(2, Ia, Ib)) ;
+imagesc(imgcat(Ia, Ib)) ;
 
 xa = f1(1,l) ;
 xb = f2(1,r) + size(Ib,2) ;
@@ -50,7 +59,22 @@ yb = f2(2,r) ;
 
 hold on ;
 h = line([xa ; xb], [ya ; yb]) ;
-set(h,'linewidth', 1, 'color', 'b') ;
+set(h,'linewidth', 1, 'color', 'r') ;
+
+hestgeotform = vision.GeometricTransformEstimator;
+[tform, inliers] = step(hestgeotform,f1(1:2,l)', f2(1:2,r)');
+dist = sum(inliers)
+l = l(inliers);
+r = r(inliers);
+
+xa = f1(1,l) ;
+xb = f2(1,r) + size(Ib,2) ;
+ya = f1(2,l) ;
+yb = f2(2,r) ;
+
+hold on ;
+h = line([xa ; xb], [ya ; yb]) ;
+set(h,'linewidth', 1, 'color', 'g') ;
 
 vl_plotframe(f1(:,l)) ;
 f2(1,:) = f2(1,:) + size(Ia,2) ;
