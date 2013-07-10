@@ -9,6 +9,7 @@ from nltk.corpus import stopwords
 import enchant
 import codecs
 import itertools
+import random
 import base64
 import os
 import sys
@@ -20,6 +21,7 @@ enchant.set_param('enchant.myspell.dictionary.path',\
                    '/opt/local/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages/enchant/share/enchant/myspell/')
 PORT_NUMBER = 8080
 
+QUERY_NORMALIZED_QUERY_MATCH = 0
 QUERY_LEMMA_MATCH = 1
 QUERY_SYNSET_MATCH = 2
 QUERY_LEMMA_SYNSET_MATCH = 3
@@ -119,9 +121,13 @@ def PutToIndex(index, key, img_id):
         index[key] = set()
         index[key].add(img_id)
 
+def QueryLemmasToNormalizedQuery(query_lemmas):
+    return " ".join(sorted([l for l in query_lemmas if l not in stop_words and l not in images_stop_words]))
+
 def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
     fin = codecs.open(click_log_file, "r", "utf-8")
 
+    query_index = {}
     unigramm_index = {}
     bigramm_index = {}
     trigramm_index = {}
@@ -135,6 +141,9 @@ def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
         clicks_num = int(line_parts[2].strip())
     
         query_lemmas = GetLemmas(query)
+        normalized_query = QueryLemmasToNormalizedQuery(query_lemmas)
+
+        PutToIndex(query_index, normalized_query, img_id)
 
         if img_id not in dont_load_unigramms_for_img_ids:
             for lemma in query_lemmas:
@@ -155,7 +164,7 @@ def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
                 PutToIndex(trigramm_index, trigramm, img_id)    
         num_lines_processed = num_lines_processed + 1
     
-    return unigramm_index, bigramm_index, trigramm_index
+    return query_index, unigramm_index, bigramm_index, trigramm_index
 
 def GetLemmas(query):
     query_tokens = nltk.word_tokenize(query)
@@ -300,8 +309,10 @@ def CreateDicts(ngramms_in_index):
 def DrawPics(out, caption, pics_to_ngramms):
     out.write("<p>")
     out.write("<h1>%s</h1>" % caption)
+    out.write("<h3>%d images totally</h3>" % len(pics_to_ngramms.keys()))
     out.write("<table><tr>")
-    for pic in pics_to_ngramms.keys():
+    keys_to_draw = random.sample(pics_to_ngramms.keys(), min(len(pics_to_ngramms.keys()), 50))     
+    for pic in keys_to_draw:
         out.write("<td><img src=\"imageget/%s\"></td>" % escape_image_id_to_be_valid_filename(pic))
         out.write("<td>%d %s</td>" % (len(pics_to_ngramms[pic]), str(pics_to_ngramms[pic])))
     out.write("</tr></table>")
@@ -309,6 +320,8 @@ def DrawPics(out, caption, pics_to_ngramms):
 def CalcImageRelevance(out, query, image):
             
     query_lemmas = GetLemmas(query)
+    normalized_query = QueryLemmasToNormalizedQuery(query_lemmas)
+    
     out.write("<table><tr><td>%s</td><td>%s</td></tr></table><br/>" % ("query lemmas", str(query_lemmas)))
     
     expanded_lemmas = {}
@@ -319,6 +332,9 @@ def CalcImageRelevance(out, query, image):
     bigramms_to_analyze = ExpandBigramms(query_lemmas, expanded_lemmas)    
     trigramms_to_analyze = ExpandTrigramms(query_lemmas, expanded_lemmas)
 
+    pics_matched_by_normalized_query = query_index.get(normalized_query, set())
+    pics_to_normalized_query = {pic : normalized_query for pic in pics_matched_by_normalized_query}
+    
     unigramms_in_index = [(unigramm, match_type, unigramm_index[unigramm]) for (unigramm, match_type) in unigramms_to_analyze if unigramm in unigramm_index]
     bigramms_in_index = [(bigramm, match_type, bigramm_index[bigramm]) for (bigramm, match_type) in bigramms_to_analyze if bigramm in bigramm_index]
     trigramms_in_index = [(trigramm, match_type, trigramm_index[trigramm]) for (trigramm, match_type) in trigramms_to_analyze if trigramm in trigramm_index]
@@ -338,14 +354,12 @@ def CalcImageRelevance(out, query, image):
     lemma_synset_trigramm_to_pics, lemma_synset_pics_to_trigramm =\
         CreateDicts(trigramms_in_index)
 
-
+    DrawPics(out, "Matching by normalized query.", pics_to_normalized_query)
     DrawPics(out, "Matching by unigramm lemma.", lemma_pics_to_unigramm)
     DrawPics(out, "Matching by unigramm synsetlemma.", synset_pics_to_unigramm)
-
     DrawPics(out, "Matching by bigramm lemma.", lemma_pics_to_bigramm)
     DrawPics(out, "Matching by bigramm lemma_synsetlemma.", lemma_synset_pics_to_bigramm)
     DrawPics(out, "Matching by bigramm synsetlemma.", synset_pics_to_bigramm)
-
     DrawPics(out, "Matching by trigramm lemma.", lemma_pics_to_trigramm)
     DrawPics(out, "Matching by trigramm lemma_synsetlemma.", lemma_synset_pics_to_trigramm)
     DrawPics(out, "Matching by trigramm synsetlemma.", synset_pics_to_trigramm)
@@ -356,11 +370,11 @@ def CalcImageRelevance(out, query, image):
     return np.random.randn()
 
 if __name__ == '__main__':
+    global query_index
     global unigramm_index
     global bigramm_index
     global trigramm_index
-    global img_index
-    unigramm_index, bigramm_index, trigramm_index = ParseClickLogAndCreateNGrammsIndexes(click_log_file)
+    query_index, unigramm_index, bigramm_index, trigramm_index = ParseClickLogAndCreateNGrammsIndexes(click_log_file)
     
     try:
         server = HTTPServer(('', PORT_NUMBER), MyHandler)
