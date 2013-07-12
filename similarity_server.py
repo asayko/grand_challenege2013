@@ -19,12 +19,28 @@ from compiler.ast import Print
 wnl = nltk.WordNetLemmatizer()
 enchant.set_param('enchant.myspell.dictionary.path',\
                    '/opt/local/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages/enchant/share/enchant/myspell/')
+dict_for_spellchecking = enchant.Dict("en_US")
+
 PORT_NUMBER = 8080
 
-QUERY_NORMALIZED_QUERY_MATCH = 0
-QUERY_LEMMA_MATCH = 1
-QUERY_SYNSET_MATCH = 2
-QUERY_LEMMA_SYNSET_MATCH = 3
+QUERY_NORMALIZED_QUERY_MATCH = 'QUERY_NORMALIZED_QUERY_MATCH'
+QUERY_LEMMA_MATCH = 'QUERY_LEMMA_MATCH'
+QUERY_SYNSET_MATCH = 'QUERY_SYNSET_MATCH'
+QUERY_LEMMA_SYNSET_MATCH = 'QUERY_LEMMA_SYNSET_MATCH'
+QUERY_TRIGRAMM_LEMMA_MATCH = 'QUERY_TRIGRAMM_LEMMA_MATCH'
+QUERY_TRIGRAMM_LEMMA_SYNSET_MATCH = 'QUERY_TRIGRAMM_LEMMA_SYNSET_MATCH'
+QUERY_TRIGRAMM_SYNSET_MATCH = 'QUERY_TRIGRAMM_SYNSET_MATCH'
+QUERY_BIGRAMM_LEMMA_MATCH = 'QUERY_BIGRAMM_LEMMA_MATCH'
+QUERY_BIGRAMM_LEMMA_SYNSET_MATCH = 'QUERY_BIGRAMM_LEMMA_SYNSET_MATCH'
+QUERY_BIGRAMM_SYNSET_MATCH = 'QUERY_BIGRAMM_SYNSET_MATCH'
+QUERY_UNIGRAMM_LEMMA_MATCH = 'QUERY_UNIGRAMM_LEMMA_MATCH'
+QUERY_UNIGRAMM_LEMMA_NN_MATCH = 'QUERY_UNIGRAMM_LEMMA_MATCH'
+QUERY_UNIGRAMM_LEMMA_SYNSET_MATCH = 'QUERY_UNIGRAMM_LEMMA_SYNSET_MATCH'
+QUERY_UNIGRAMM_SYNSET_MATCH = 'QUERY_UNIGRAMM_SYNSET_MATCH'
+QUERY_UNIGRAMM_SYNSET_NN_MATCH = 'QUERY_UNIGRAMM_SYNSET_MATCH'
+
+MIN_POSSIBLE_VISUAL_MODEL_SIZE = 3
+ENOUGH_VISUAL_MODEL_SIZE = 100
 
 click_log_file = "/Users/asayko/data/grand_challenge/Train/TrainClickLog100K.tsv"
 click_images_dir = "/Users/asayko/data/grand_challenge/Train/images_jpeg_renamed/"
@@ -48,6 +64,8 @@ images_stop_words = set(['photo', 'pic', 'image', 'picture', 'free', 'video', 'p
                            'pitcure', 'picftures', 'picitures', 'picters'])
 unigramm_stop_words = set(['2000', '2001', '2002', '2003', '2004', '2005', '2006', '2007', '2008', '2009',\
                             '2010', '2011', '2012', '2013', '2014', 'dr', 'pdf', 'jpeg', 'jpg', 'com', 'www'])
+
+noun_like_unigramm_pos_tags = set(['NN', 'NNS', 'NNP', 'NNPS', ])
 
 class MyHandler(BaseHTTPRequestHandler):
     
@@ -100,6 +118,7 @@ class MyHandler(BaseHTTPRequestHandler):
             if not form.has_key("query"):
                 self.wfile.write("Missing required parameter.")
             else:
+                self.PrintOutInputForm()
                 query = form.getvalue("query", "default")
                 image = form.getvalue("image", "default")
                 relev = CalcImageRelevance(self.wfile, query, image)
@@ -182,7 +201,9 @@ def ExpandLemma(lemma):
     expanded_lemmas = set()
     for s in wn.synsets(lemma):
         for l in s.lemma_names:
-            expanded_lemmas.add(l)
+            ts = l.split('_')
+            for t in ts:
+                expanded_lemmas.add(t.lower())
     if lemma in expanded_lemmas: expanded_lemmas.remove(lemma)
     return expanded_lemmas
 
@@ -281,49 +302,30 @@ def PutToDicts(ngramm, pic, ngramm_to_pics, pics_to_ngramm):
         ngramm_to_pics[ngramm] = set()
         ngramm_to_pics[ngramm].add(pic)
 
-def CreateDicts(ngramms_in_index):
-    lemma_ngramm_to_pics = {}
-    lemma_pics_to_ngramm = {}
-    synset_ngramm_to_pics = {}
-    synset_pics_to_ngramm = {}
-    lemma_synset_ngramm_to_pics = {}
-    lemma_synset_pics_to_ngramm = {}
-
-    
-    for (ngramm, match_type, pics) in ngramms_in_index:
-        if match_type == QUERY_LEMMA_MATCH:
-            for pic in pics:
-                PutToDicts(ngramm, pic, lemma_ngramm_to_pics, lemma_pics_to_ngramm)
-        elif match_type == QUERY_SYNSET_MATCH:
-            for pic in pics:
-                PutToDicts(ngramm, pic, synset_ngramm_to_pics, synset_pics_to_ngramm)
-        elif match_type == QUERY_LEMMA_SYNSET_MATCH:
-            for pic in pics:
-                PutToDicts(ngramm, pic, lemma_synset_ngramm_to_pics, lemma_synset_pics_to_ngramm)
-
-                
-    return lemma_ngramm_to_pics, lemma_pics_to_ngramm,\
-         synset_ngramm_to_pics, synset_pics_to_ngramm,\
-         lemma_synset_ngramm_to_pics, lemma_synset_pics_to_ngramm
-
 def DrawPics(out, caption, pics_to_ngramms):
     out.write("<p>")
     out.write("<h1>%s</h1>" % caption)
     out.write("<h3>%d images totally</h3>" % len(pics_to_ngramms.keys()))
-    out.write("<table><tr>")
+    out.write("<table>")
     keys_to_draw = random.sample(pics_to_ngramms.keys(), min(len(pics_to_ngramms.keys()), 50))     
     for pic in keys_to_draw:
+        out.write("<tr>")
         out.write("<td><img src=\"imageget/%s\"></td>" % escape_image_id_to_be_valid_filename(pic))
         out.write("<td>%d %s</td>" % (len(pics_to_ngramms[pic]), str(pics_to_ngramms[pic])))
-    out.write("</tr></table>")
+        out.write("</tr>")
+    out.write("</table>")
 
-def CalcImageRelevance(out, query, image):
-            
+def CreateVisualModelForQuery(out, query):
+    # trying to collect some how relevant pics from click_log_db  
+    query_visual_model = {}
+
     query_lemmas = GetLemmas(query)
     normalized_query = QueryLemmasToNormalizedQuery(query_lemmas)
-    
-    out.write("<table><tr><td>%s</td><td>%s</td></tr></table><br/>" % ("query lemmas", str(query_lemmas)))
-    
+
+    out.write("<table><tr><td>%s</td><td>%s</td></tr></table><br/>" % ("query:", query))
+    out.write("<table><tr><td>%s</td><td>%s</td></tr></table><br/>" % ("query lemmas:", str(query_lemmas)))
+    out.write("<table><tr><td>%s</td><td>%s</td></tr></table><br/>" % ("normalized query:", normalized_query))
+
     expanded_lemmas = {}
     for lemma in query_lemmas:
         expanded_lemmas[lemma] = ExpandLemma(lemma)
@@ -332,40 +334,112 @@ def CalcImageRelevance(out, query, image):
     bigramms_to_analyze = ExpandBigramms(query_lemmas, expanded_lemmas)    
     trigramms_to_analyze = ExpandTrigramms(query_lemmas, expanded_lemmas)
 
-    pics_matched_by_normalized_query = query_index.get(normalized_query, set())
-    pics_to_normalized_query = {pic : normalized_query for pic in pics_matched_by_normalized_query}
+    # adding norm query matches
+    for pic in query_index.get(normalized_query, set()):
+         query_visual_model.setdefault(pic, set()).add(QUERY_NORMALIZED_QUERY_MATCH)
     
-    unigramms_in_index = [(unigramm, match_type, unigramm_index[unigramm]) for (unigramm, match_type) in unigramms_to_analyze if unigramm in unigramm_index]
-    bigramms_in_index = [(bigramm, match_type, bigramm_index[bigramm]) for (bigramm, match_type) in bigramms_to_analyze if bigramm in bigramm_index]
-    trigramms_in_index = [(trigramm, match_type, trigramm_index[trigramm]) for (trigramm, match_type) in trigramms_to_analyze if trigramm in trigramm_index]
+    # ading trigramms lemma and synset_lemma matches
+    for (trigramm, match_type) in trigramms_to_analyze:
+        if trigramm in trigramm_index and match_type == QUERY_LEMMA_MATCH:
+            for pic in trigramm_index[trigramm]:
+                query_visual_model.setdefault(pic, set()).add(QUERY_TRIGRAMM_LEMMA_MATCH)
+        elif trigramm in trigramm_index and match_type == QUERY_LEMMA_SYNSET_MATCH:
+            for pic in trigramm_index[trigramm]:
+                query_visual_model.setdefault(pic, set()).add(QUERY_TRIGRAMM_LEMMA_SYNSET_MATCH)
+                
+    # adding bigramms lemma matches
+    for (bigramm, match_type) in bigramms_to_analyze:
+        if bigramm in bigramm_index and match_type == QUERY_LEMMA_MATCH:
+             for pic in bigramm_index[bigramm]:
+                 query_visual_model.setdefault(pic, set()).add(QUERY_BIGRAMM_LEMMA_MATCH)
     
-    lemma_unigramm_to_pics, lemma_pics_to_unigramm,\
-    synset_unigramm_to_pics, synset_pics_to_unigramm,\
-    lemma_synset_unigramm_to_pics, lemma_synset_pics_to_unigramm =\
-        CreateDicts(unigramms_in_index)
-        
-    lemma_bigramm_to_pics, lemma_pics_to_bigramm,\
-    synset_bigramm_to_pics, synset_pics_to_bigramm,\
-    lemma_synset_bigramm_to_pics, lemma_synset_pics_to_bigramm =\
-        CreateDicts(bigramms_in_index)
-
-    lemma_trigramm_to_pics, lemma_pics_to_trigramm,\
-    synset_trigramm_to_pics, synset_pics_to_trigramm,\
-    lemma_synset_trigramm_to_pics, lemma_synset_pics_to_trigramm =\
-        CreateDicts(trigramms_in_index)
-
-    DrawPics(out, "Matching by normalized query.", pics_to_normalized_query)
-    DrawPics(out, "Matching by unigramm lemma.", lemma_pics_to_unigramm)
-    DrawPics(out, "Matching by unigramm synsetlemma.", synset_pics_to_unigramm)
-    DrawPics(out, "Matching by bigramm lemma.", lemma_pics_to_bigramm)
-    DrawPics(out, "Matching by bigramm lemma_synsetlemma.", lemma_synset_pics_to_bigramm)
-    DrawPics(out, "Matching by bigramm synsetlemma.", synset_pics_to_bigramm)
-    DrawPics(out, "Matching by trigramm lemma.", lemma_pics_to_trigramm)
-    DrawPics(out, "Matching by trigramm lemma_synsetlemma.", lemma_synset_pics_to_trigramm)
-    DrawPics(out, "Matching by trigramm synsetlemma.", synset_pics_to_trigramm)
+    # if we have enough then stop
+    if len(query_visual_model) > ENOUGH_VISUAL_MODEL_SIZE:
+        return query_visual_model
     
-    out.write("</p>")
+    
+    # add most valuable unigramms
+    for (unigramm, match_type) in unigramms_to_analyze:
+        if unigramm in unigramm_index and match_type == QUERY_LEMMA_MATCH:
+            pos = nltk.pos_tag([unigramm])[-1][-1]
+            if pos in noun_like_unigramm_pos_tags:
+                for pic in unigramm_index[unigramm]:
+                    query_visual_model.setdefault(pic, set()).add(QUERY_UNIGRAMM_LEMMA_NN_MATCH)
+    
+    # adding bigramms lemma synset matches
+    for (bigramm, match_type) in bigramms_to_analyze:
+        if bigramm in bigramm_index and match_type == QUERY_LEMMA_SYNSET_MATCH:
+             for pic in bigramm_index[bigramm]:
+                 query_visual_model.setdefault(pic, set()).add(QUERY_BIGRAMM_LEMMA_SYNSET_MATCH)
 
+    # if we have enough then stop
+    if len(query_visual_model) > ENOUGH_VISUAL_MODEL_SIZE:
+        return query_visual_model
+
+    # adding trigramms synset synset synset
+    for (trigramm, match_type) in trigramms_to_analyze:
+        if trigramm in trigramm_index and match_type == QUERY_SYNSET_MATCH:
+            for pic in trigramm_index[trigramm]:
+                query_visual_model.setdefault(pic, set()).add(QUERY_TRIGRAMM_SYNSET_MATCH)
+
+    # adding bigramms lemma matches
+    for (bigramm, match_type) in bigramms_to_analyze:
+        if bigramm in bigramm_index and match_type == QUERY_SYNSET_MATCH:
+             for pic in bigramm_index[bigramm]:
+                 query_visual_model.setdefault(pic, set()).add(QUERY_BIGRAMM_SYNSET_MATCH)
+
+    # if we have enough then stop
+    if len(query_visual_model) > ENOUGH_VISUAL_MODEL_SIZE:
+        return query_visual_model
+
+    # add most valuable synset unigramms
+    for (unigramm, match_type) in unigramms_to_analyze:
+        if unigramm in unigramm_index and match_type == QUERY_SYNSET_MATCH:
+            pos = nltk.pos_tag([unigramm])[-1][-1]
+            if pos in noun_like_unigramm_pos_tags:
+                for pic in unigramm_index[unigramm]:
+                    query_visual_model.setdefault(pic, set()).add(QUERY_UNIGRAMM_SYNSET_NN_MATCH)    
+
+    # if we have enough then stop
+    if len(query_visual_model) > ENOUGH_VISUAL_MODEL_SIZE:
+        return query_visual_model
+
+    # add all lemma unigramms
+    for (unigramm, match_type) in unigramms_to_analyze:
+        if unigramm in unigramm_index and match_type == QUERY_LEMMA_MATCH:
+            for pic in unigramm_index[unigramm]:
+                query_visual_model.setdefault(pic, set()).add(QUERY_UNIGRAMM_LEMMA_MATCH)
+
+    # add all synset unigramms
+    for (unigramm, match_type) in unigramms_to_analyze:
+        if unigramm in unigramm_index and match_type == QUERY_SYNSET_MATCH:
+            for pic in unigramm_index[unigramm]:
+                query_visual_model.setdefault(pic, set()).add(QUERY_UNIGRAMM_SYNSET_MATCH)    
+            
+    return query_visual_model
+
+def SpellCheckingEnrich(query):
+    query_lemmas = GetLemmas(query)
+    enriched_lemmas = []
+    
+    for l in query_lemmas:
+        enriched_lemmas.append(l)
+        if not dict_for_spellchecking.check(l):
+            suggested_lemmas = dict_for_spellchecking.suggest(l)
+            for sl in suggested_lemmas:
+                enriched_lemmas.append(sl)
+                
+    return " ".join(enriched_lemmas)
+
+def CalcImageRelevance(out, query, image):
+                    
+    query_visual_model = CreateVisualModelForQuery(out, query)
+    
+    if len(query_visual_model) < MIN_POSSIBLE_VISUAL_MODEL_SIZE:
+        query = SpellCheckingEnrich(query)
+        query_visual_model = CreateVisualModelForQuery(out, query)
+    
+    DrawPics(out, "Visual query model.", query_visual_model)
     
     return np.random.randn()
 
