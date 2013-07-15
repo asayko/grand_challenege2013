@@ -1,4 +1,4 @@
-all: sift_descriptors sift_extractor vis_words_extractor
+all: sift_descriptors sift_extractor vis_words_extractor online_vis_words_extractor
 	
 clean:
 	rm -rf *.o sift_descriptors sift_extractor
@@ -20,3 +20,9 @@ vis_words_extractor: vis_words_extractor.o
 	
 vis_words_extractor.o: vis_words_extractor.cpp
 	g++ -c vis_words_extractor.cpp -O2 `pkg-config opencv --cflags --libs` -lpthread
+	
+online_vis_words_extractor: online_vis_words_extractor.o
+	g++ online_vis_words_extractor.o -o online_vis_words_extractor -O2 `pkg-config opencv --cflags --libs` -lpthread
+	
+online_vis_words_extractor.o: online_vis_words_extractor.cpp
+	g++ -c online_vis_words_extractor.cpp -O2 `pkg-config opencv --cflags --libs` -lpthread
