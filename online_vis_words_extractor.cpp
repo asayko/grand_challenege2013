@@ -100,7 +100,7 @@ void ReadCvMatFromFile(cv::Mat & mat, const char * fileName) {
 }
 
 int main() {
-	const char * inVocabularyFileName = "vocabulary10000.tsv";
+	const char * inVocabularyFileName = "/Users/asayko/data/grand_challenge/Train/vocabulary10000.tsv";
 
 	cv::Mat visualVocabularyMat;
 	ReadCvMatFromFile(visualVocabularyMat, inVocabularyFileName);
@@ -111,8 +111,8 @@ int main() {
 		std::getline(std::cin, imgBase64);
 		boost::algorithm::trim(imgBase64);
 
-		std::cerr << "got image" << std::endl;
-		std::cerr << "==============\n" << imgBase64 << "==============\n" << std::endl;
+		//std::cerr << "got image" << std::endl;
+		//std::cerr << "==============\n" << imgBase64 << "==============\n" << std::endl;
 
 		if (imgBase64.length() == 0) {
 			continue;
@@ -131,7 +131,7 @@ int main() {
 		cv::Mat descriptors;
 		featureExtractor->compute(imgCv, keypoints, descriptors);
 
-		std::cerr << "got descriptors" << std::endl;
+		//std::cerr << "got descriptors" << std::endl;
 
 		for (size_t descIdx = 0; descIdx < descriptors.rows; ++descIdx) {
 			cv::Mat tmp;
@@ -139,7 +139,7 @@ int main() {
 			tmp.copyTo(descriptors.row(descIdx));
 		}
 
-		std::cerr << "got descriptors normed" << std::endl;
+		//std::cerr << "got descriptors normed" << std::endl;
 
 		cv::Mat indices(descriptors.rows, 1, CV_32S);
 		cv::Mat dists(descriptors.rows, 1, CV_32F);
@@ -148,13 +148,13 @@ int main() {
 			visualVocabularyIndex.knnSearch(descriptors, indices, dists, 1);
 		}
 
-		std::cerr << "got vis_words" << std::endl;
+		//std::cerr << "got vis_words" << std::endl;
 
 		for (size_t visWordIdx = 0; visWordIdx < indices.rows; ++visWordIdx) {
 			std::cout << indices.at<int>(visWordIdx, 0) << " ";
 		}
 		std::cout << std::endl;
 
-		std::cerr << "done" << std::endl;
+		//std::cerr << "done" << std::endl;
 	}
 }

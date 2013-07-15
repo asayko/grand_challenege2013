@@ -9,17 +9,21 @@ from nltk.corpus import stopwords
 import enchant
 import codecs
 import itertools
+import collections
 import random
 import base64
 import os
+import subprocess
 import sys
 import cgi
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-from compiler.ast import Print
+
 wnl = nltk.WordNetLemmatizer()
 enchant.set_param('enchant.myspell.dictionary.path',\
                    '/opt/local/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages/enchant/share/enchant/myspell/')
 dict_for_spellchecking = enchant.Dict("en_US")
+
+online_vis_words_extractor = subprocess.Popen('/Users/asayko/workspace/grand2013challenge/online_vis_words_extractor', stdin = subprocess.PIPE, stdout = subprocess.PIPE)
 
 PORT_NUMBER = 8080
 
@@ -42,9 +46,10 @@ QUERY_UNIGRAMM_SYNSET_NN_MATCH = 'QUERY_UNIGRAMM_SYNSET_MATCH'
 MIN_POSSIBLE_VISUAL_MODEL_SIZE = 3
 ENOUGH_VISUAL_MODEL_SIZE = 100
 
-click_log_file = "/Users/asayko/data/grand_challenge/Train/TrainClickLog100K.tsv"
+click_log_file = "/Users/asayko/data/grand_challenge/Train/TrainClickLog10K.tsv"
 click_images_dir = "/Users/asayko/data/grand_challenge/Train/images_jpeg_renamed/"
 
+visual_words_file = "./vis_words_10000.tsv"
 
 dont_load_unigramms_for_img_ids_file = "/Users/asayko/workspace/grand2013challenge/dont_load_unigramms_for_pics.txt"
 dont_load_unigramms_for_img_ids = set([t.strip() for t in codecs.open(dont_load_unigramms_for_img_ids_file, "r", "utf-8")])
@@ -115,7 +120,7 @@ class MyHandler(BaseHTTPRequestHandler):
         self.wfile.write("<html><body>")
         if self.path == "/imagerank":
             #if not form.has_key("runID") or not form.has_key("query") or not form.has_key("image"):
-            if not form.has_key("query"):
+            if not form.has_key("query") or not form.has_key("image"):
                 self.wfile.write("Missing required parameter.")
             else:
                 self.PrintOutInputForm()
@@ -150,6 +155,8 @@ def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
     unigramm_index = {}
     bigramm_index = {}
     trigramm_index = {}
+    
+    print >> sys.stderr,  "Reading click log from %s" % click_log_file
       
     num_lines_processed = 0
     for line in fin.xreadlines():
@@ -158,7 +165,11 @@ def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
         img_id = line_parts[0].strip()
         query = line_parts[1].strip()
         clicks_num = int(line_parts[2].strip())
-    
+        
+        if clicks_num <= 1:
+            num_lines_processed = num_lines_processed + 1
+            continue
+        
         query_lemmas = GetLemmas(query)
         normalized_query = QueryLemmasToNormalizedQuery(query_lemmas)
 
@@ -184,6 +195,25 @@ def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
         num_lines_processed = num_lines_processed + 1
     
     return query_index, unigramm_index, bigramm_index, trigramm_index
+
+def ParseVisualWordsBase(visual_words_file):
+    fin = codecs.open(visual_words_file, "r", "utf-8")
+    num_lines_processed = 0
+    
+    print >> sys.stderr,  "Reading visual words from %s" % visual_words_file
+    
+    vis_words_index = {}
+    
+    for line in fin.xreadlines():
+        if num_lines_processed % 5000 == 0: print >> sys.stderr,  "%d lines processed" % num_lines_processed
+        line_parts = line.split("\t")
+        img_id = line_parts[0].strip()
+        vis_words_str = line_parts[1].strip()
+        vis_words = collections.Counter([int(w) for w in vis_words_str.split()])
+        vis_words_index[img_id] = vis_words
+        num_lines_processed = num_lines_processed + 1
+
+    return vis_words_index
 
 def GetLemmas(query):
     query_tokens = nltk.word_tokenize(query)
@@ -431,8 +461,17 @@ def SpellCheckingEnrich(query):
                 
     return " ".join(enriched_lemmas)
 
+def ExtractVisualWords(image):
+    online_vis_words_extractor.stdin.write("%s\n" % image)
+    vis_words_line = online_vis_words_extractor.stdout.readline().strip()
+    bag_of_vis_words = sorted([int(w) for w in vis_words_line.split()])
+    return bag_of_vis_words    
+
 def CalcImageRelevance(out, query, image):
-                    
+    
+    image_bag_of_visual_words = ExtractVisualWords(image)
+    out.write("<p>visual words: %s</p>" % str(image_bag_of_visual_words))
+    
     query_visual_model = CreateVisualModelForQuery(out, query)
     
     if len(query_visual_model) < MIN_POSSIBLE_VISUAL_MODEL_SIZE:
@@ -441,15 +480,33 @@ def CalcImageRelevance(out, query, image):
     
     DrawPics(out, "Visual query model.", query_visual_model)
     
-    return np.random.randn()
+    relevance = 0.0
+    
+    for clicked_pic in query_visual_model.keys():
+        clicked_pic_vis_words = visual_words_index[clicked_pic]
+        clicked_pic_vis_words_len = float(sum(clicked_pic_vis_words.values()))
+        
+        given_image_vis_words = collections.Counter(image_bag_of_visual_words)
+        given_image_vis_words_len = float(len(image_bag_of_visual_words))
+        
+        intersection_len = float(sum((given_image_vis_words & clicked_pic_vis_words).values()))
+        union_len = clicked_pic_vis_words_len + given_image_vis_words_len - intersection_len;
+        
+        if union_len != 0.0:
+            relevance = relevance + intersection_len / union_len
+        
+    return relevance
 
 if __name__ == '__main__':
+    global visual_words_index
+    visual_words_index = ParseVisualWordsBase(visual_words_file)
+
     global query_index
     global unigramm_index
     global bigramm_index
     global trigramm_index
     query_index, unigramm_index, bigramm_index, trigramm_index = ParseClickLogAndCreateNGrammsIndexes(click_log_file)
-    
+        
     try:
         server = HTTPServer(('', PORT_NUMBER), MyHandler)
         print 'Started httpserver on port ' , PORT_NUMBER
