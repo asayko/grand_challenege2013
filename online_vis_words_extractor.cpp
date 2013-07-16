@@ -100,13 +100,13 @@ void ReadCvMatFromFile(cv::Mat & mat, const char * fileName) {
 }
 
 int main() {
-	const char * inVocabularyFileName = "/Users/asayko/data/grand_challenge/Train/vocabulary10000.tsv";
+	const char * inVocabularyFileName = "./vocabulary10000.tsv";
 
 	cv::Mat visualVocabularyMat;
 	ReadCvMatFromFile(visualVocabularyMat, inVocabularyFileName);
 	cv::flann::Index visualVocabularyIndex(visualVocabularyMat, cv::flann::LinearIndexParams());
 
-	while (!std::cin.fail()) {
+	while (!std::cin.fail()) { try {
 		std::string imgBase64;
 		std::getline(std::cin, imgBase64);
 		boost::algorithm::trim(imgBase64);
@@ -156,5 +156,5 @@ int main() {
 		std::cout << std::endl;
 
 		//std::cerr << "done" << std::endl;
-	}
+	} catch (...) {} }
 }
