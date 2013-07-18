@@ -382,13 +382,20 @@ def CalcImageRelevance(out, query, image):
     return relevance
 
 if __name__ == '__main__':
-    
-    visual_words_index = pickle.load(visual_words_save_to_file)
+    print >> sys.stderr, "Loading %s" % create_pickle_indexes.visual_words_save_to_file
+    visual_words_index = pickle.load(open(create_pickle_indexes.visual_words_save_to_file, "r"))
 
-    query_index = pickle.load(query_index_save_to_file)
-    unigramm_index = pickle.load(unigramm_index_save_to_file)
-    bigramm_index = pickle.load(bigramm_index_save_to_file)
-    trigramm_index = pickle.load(trigramm_index_save_to_file)
+    print >> sys.stderr, "Loading %s" % create_pickle_indexes.query_index_save_to_file
+    query_index = pickle.load(create_pickle_indexes.query_index_save_to_file)
+    
+    print >> sys.stderr, "Loading %s" % create_pickle_indexes.unigramm_index_save_to_file
+    unigramm_index = pickle.load(create_pickle_indexes.unigramm_index_save_to_file)
+    
+    print >> sys.stderr, "Loading %s" % create_pickle_indexes.bigramm_index_save_to_file
+    bigramm_index = pickle.load(create_pickle_indexes.bigramm_index_save_to_file)
+    
+    print >> sys.stderr, "Loading %s" % create_pickle_indexes.trigramm_index_save_to_file
+    trigramm_index = pickle.load(create_pickle_indexes.trigramm_index_save_to_file)
         
     try:
         server = HTTPServer(('', PORT_NUMBER), MyHandler)
