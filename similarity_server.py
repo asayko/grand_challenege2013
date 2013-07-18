@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 
 import numpy as np
-import scipy as sp
-import pandas as pd
 import nltk
 from nltk.corpus import wordnet as wn
 from nltk.corpus import stopwords
@@ -16,16 +14,23 @@ import os
 import subprocess
 import sys
 import cgi
+import pickle
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 
-wnl = nltk.WordNetLemmatizer()
+import create_pickle_indexes
+
 enchant.set_param('enchant.myspell.dictionary.path',\
                    '/opt/local/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages/enchant/share/enchant/myspell/')
 dict_for_spellchecking = enchant.Dict("en_US")
 
-online_vis_words_extractor = subprocess.Popen('/Users/asayko/workspace/grand2013challenge/online_vis_words_extractor', stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+click_images_dir = "/Users/asayko/data/grand_challenge/Train/images_jpeg_renamed/"
+
+online_vis_words_extractor = subprocess.Popen('./online_vis_words_extractor', stdin = subprocess.PIPE, stdout = subprocess.PIPE)
 
 PORT_NUMBER = 8080
+
+MIN_POSSIBLE_VISUAL_MODEL_SIZE = 3
+ENOUGH_VISUAL_MODEL_SIZE = 100
 
 QUERY_NORMALIZED_QUERY_MATCH = 'QUERY_NORMALIZED_QUERY_MATCH'
 QUERY_LEMMA_MATCH = 'QUERY_LEMMA_MATCH'
@@ -42,33 +47,6 @@ QUERY_UNIGRAMM_LEMMA_NN_MATCH = 'QUERY_UNIGRAMM_LEMMA_MATCH'
 QUERY_UNIGRAMM_LEMMA_SYNSET_MATCH = 'QUERY_UNIGRAMM_LEMMA_SYNSET_MATCH'
 QUERY_UNIGRAMM_SYNSET_MATCH = 'QUERY_UNIGRAMM_SYNSET_MATCH'
 QUERY_UNIGRAMM_SYNSET_NN_MATCH = 'QUERY_UNIGRAMM_SYNSET_MATCH'
-
-MIN_POSSIBLE_VISUAL_MODEL_SIZE = 3
-ENOUGH_VISUAL_MODEL_SIZE = 100
-
-click_log_file = "/Users/asayko/data/grand_challenge/Train/TrainClickLog10K.tsv"
-click_images_dir = "/Users/asayko/data/grand_challenge/Train/images_jpeg_renamed/"
-
-visual_words_file = "./vis_words_10000.tsv"
-
-dont_load_unigramms_for_img_ids_file = "/Users/asayko/workspace/grand2013challenge/dont_load_unigramms_for_pics.txt"
-dont_load_unigramms_for_img_ids = set([t.strip() for t in codecs.open(dont_load_unigramms_for_img_ids_file, "r", "utf-8")])
-
-dont_load_bigramms_for_img_ids_file = "/Users/asayko/workspace/grand2013challenge/dont_load_bigramms_for_pics.txt"
-dont_load_bigramms_for_img_ids = set([t.strip() for t in codecs.open(dont_load_bigramms_for_img_ids_file, "r", "utf-8")])
-
-dont_load_trigramms_for_img_ids_file = "/Users/asayko/workspace/grand2013challenge/dont_load_trigramms_for_pics.txt"
-dont_load_trigramms_for_img_ids = set([t.strip() for t in codecs.open(dont_load_trigramms_for_img_ids_file, "r", "utf-8")])
-
-stop_words = set(stopwords.words('english'))
-
-images_stop_words = set(['photo', 'pic', 'image', 'picture', 'free', 'video', 'photes', 'pichures', '1024',\
-                          'iamges', 'picturers', 'picuters', 'pictires', 'picure', 'imagens', 'picter', '1920x1080', 'imags',\
-                           'pcitures', 'imeges', 'pitcures', 'pictrues', 'imges', 'pictuer', 'pictur', 'imiges',\
-                           'picutres', 'imagenes', 'picures', 'pictues','pictuers', 'photography', 'pitures',\
-                           'pitcure', 'picftures', 'picitures', 'picters'])
-unigramm_stop_words = set(['2000', '2001', '2002', '2003', '2004', '2005', '2006', '2007', '2008', '2009',\
-                            '2010', '2011', '2012', '2013', '2014', 'dr', 'pdf', 'jpeg', 'jpg', 'com', 'www'])
 
 noun_like_unigramm_pos_tags = set(['NN', 'NNS', 'NNP', 'NNPS', ])
 
@@ -115,117 +93,25 @@ class MyHandler(BaseHTTPRequestHandler):
                          'CONTENT_TYPE':self.headers['Content-Type'],
             })
         self.send_response(200)
-        self.send_header('Content-type','text/html')
+        self.send_header('Content-type','text/plain')
         self.end_headers()
-        self.wfile.write("<html><body>")
+        #self.wfile.write("<html><body>")
         if self.path == "/imagerank":
             #if not form.has_key("runID") or not form.has_key("query") or not form.has_key("image"):
             if not form.has_key("query") or not form.has_key("image"):
                 self.wfile.write("Missing required parameter.")
             else:
-                self.PrintOutInputForm()
+                #self.PrintOutInputForm()
                 query = form.getvalue("query", "default")
                 image = form.getvalue("image", "default")
-                relev = CalcImageRelevance(self.wfile, query, image)
+                relev = CalcImageRelevance(sys.stderr, query, image)
                 self.wfile.write(relev)
-        self.PrintOutInputForm()
-        self.wfile.write("</body></html>")
+        #self.PrintOutInputForm()
+        #self.wfile.write("</body></html>")
         return
 
 def escape_image_id_to_be_valid_filename(image_id):
     return base64.urlsafe_b64encode(image_id)
-
-def is_ascii(s):
-    return all(ord(c) < 128 for c in s)
-
-def PutToIndex(index, key, img_id): 
-    if index.has_key(key):
-        index[key].add(img_id)
-    else:
-        index[key] = set()
-        index[key].add(img_id)
-
-def QueryLemmasToNormalizedQuery(query_lemmas):
-    return " ".join(sorted([l for l in query_lemmas if l not in stop_words and l not in images_stop_words]))
-
-def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
-    fin = codecs.open(click_log_file, "r", "utf-8")
-
-    query_index = {}
-    unigramm_index = {}
-    bigramm_index = {}
-    trigramm_index = {}
-    
-    print >> sys.stderr,  "Reading click log from %s" % click_log_file
-      
-    num_lines_processed = 0
-    for line in fin.xreadlines():
-        if num_lines_processed % 5000 == 0: print >> sys.stderr,  "%d lines processed" % num_lines_processed
-        line_parts = line.split("\t")
-        img_id = line_parts[0].strip()
-        query = line_parts[1].strip()
-        clicks_num = int(line_parts[2].strip())
-        
-        if clicks_num <= 1:
-            num_lines_processed = num_lines_processed + 1
-            continue
-        
-        query_lemmas = GetLemmas(query)
-        normalized_query = QueryLemmasToNormalizedQuery(query_lemmas)
-
-        PutToIndex(query_index, normalized_query, img_id)
-
-        if img_id not in dont_load_unigramms_for_img_ids:
-            for lemma in query_lemmas:
-                if lemma in unigramm_stop_words: continue
-                unigramm = "%s" % lemma
-                PutToIndex(unigramm_index, unigramm, img_id)
-
-        if img_id not in dont_load_bigramms_for_img_ids:
-            for bigramm in itertools.combinations(query_lemmas, 2):
-                b = sorted(bigramm)
-                bigramm = "%s %s" % (b[0], b[1])
-                PutToIndex(bigramm_index, bigramm, img_id)
-        
-        if img_id not in dont_load_trigramms_for_img_ids:
-            for trigramm in itertools.combinations(query_lemmas, 3):
-                t = sorted(trigramm)
-                trigramm = "%s %s %s" % (t[0], t[1], t[2])
-                PutToIndex(trigramm_index, trigramm, img_id)    
-        num_lines_processed = num_lines_processed + 1
-    
-    return query_index, unigramm_index, bigramm_index, trigramm_index
-
-def ParseVisualWordsBase(visual_words_file):
-    fin = codecs.open(visual_words_file, "r", "utf-8")
-    num_lines_processed = 0
-    
-    print >> sys.stderr,  "Reading visual words from %s" % visual_words_file
-    
-    vis_words_index = {}
-    
-    for line in fin.xreadlines():
-        if num_lines_processed % 5000 == 0: print >> sys.stderr,  "%d lines processed" % num_lines_processed
-        line_parts = line.split("\t")
-        img_id = line_parts[0].strip()
-        vis_words_str = line_parts[1].strip()
-        vis_words = collections.Counter([int(w) for w in vis_words_str.split()])
-        vis_words_index[img_id] = vis_words
-        num_lines_processed = num_lines_processed + 1
-
-    return vis_words_index
-
-def GetLemmas(query):
-    query_tokens = nltk.word_tokenize(query)
-    query_lemmas = []
-    for token in query_tokens:
-        lemma = wnl.lemmatize(token)
-        if lemma in stop_words: continue
-        if lemma in images_stop_words: continue
-        if not lemma.isalnum(): continue
-        if not is_ascii(lemma): continue
-        query_lemmas.append(lemma.lower())
-    return query_lemmas
 
 def ExpandLemma(lemma):
     expanded_lemmas = set()
@@ -319,19 +205,6 @@ def ExpandTrigramms(query_lemmas, expanded_lemmas):
             
     return trigramms_to_analyze
 
-def PutToDicts(ngramm, pic, ngramm_to_pics, pics_to_ngramm):
-    if pic in pics_to_ngramm:
-        pics_to_ngramm[pic].add(ngramm)
-    else:
-        pics_to_ngramm[pic] = set()
-        pics_to_ngramm[pic].add(ngramm)
-        
-    if ngramm in ngramm_to_pics:
-        ngramm_to_pics[ngramm].add(pic)
-    else:
-        ngramm_to_pics[ngramm] = set()
-        ngramm_to_pics[ngramm].add(pic)
-
 def DrawPics(out, caption, pics_to_ngramms):
     out.write("<p>")
     out.write("<h1>%s</h1>" % caption)
@@ -386,7 +259,6 @@ def CreateVisualModelForQuery(out, query):
     # if we have enough then stop
     if len(query_visual_model) > ENOUGH_VISUAL_MODEL_SIZE:
         return query_visual_model
-    
     
     # add most valuable unigramms
     for (unigramm, match_type) in unigramms_to_analyze:
@@ -467,6 +339,16 @@ def ExtractVisualWords(image):
     bag_of_vis_words = sorted([int(w) for w in vis_words_line.split()])
     return bag_of_vis_words    
 
+def DumpVisualModel(query, image, visual_model):
+    file_name = QueryLemmasToNormalizedQuery(GetLemmas(query))
+    file_name += str(random.randint())
+    fout = codecs.open(file_name, "w", "utf-8")
+    print >> fout, query
+    print >> fout, image
+    for pic in visual_model:
+        print >> fout, pic
+    fout.close()
+
 def CalcImageRelevance(out, query, image):
     
     image_bag_of_visual_words = ExtractVisualWords(image)
@@ -479,6 +361,8 @@ def CalcImageRelevance(out, query, image):
         query_visual_model = CreateVisualModelForQuery(out, query)
     
     DrawPics(out, "Visual query model.", query_visual_model)
+    
+    DumpVisualModel(query, image, visual_model)
     
     relevance = 0.0
     
@@ -493,19 +377,18 @@ def CalcImageRelevance(out, query, image):
         union_len = clicked_pic_vis_words_len + given_image_vis_words_len - intersection_len;
         
         if union_len != 0.0:
-            relevance = relevance + intersection_len / union_len
+            relevance = relevance + pow(20, intersection_len / union_len) - 1.0
         
     return relevance
 
 if __name__ == '__main__':
-    global visual_words_index
-    visual_words_index = ParseVisualWordsBase(visual_words_file)
+    
+    visual_words_index = pickle.load(visual_words_save_to_file)
 
-    global query_index
-    global unigramm_index
-    global bigramm_index
-    global trigramm_index
-    query_index, unigramm_index, bigramm_index, trigramm_index = ParseClickLogAndCreateNGrammsIndexes(click_log_file)
+    query_index = pickle.load(query_index_save_to_file)
+    unigramm_index = pickle.load(unigramm_index_save_to_file)
+    bigramm_index = pickle.load(bigramm_index_save_to_file)
+    trigramm_index = pickle.load(trigramm_index_save_to_file)
         
     try:
         server = HTTPServer(('', PORT_NUMBER), MyHandler)
