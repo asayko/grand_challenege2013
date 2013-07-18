@@ -15,6 +15,7 @@ import subprocess
 import sys
 import cgi
 import pickle
+import datetime
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 
 import create_pickle_indexes
@@ -382,20 +383,23 @@ def CalcImageRelevance(out, query, image):
     return relevance
 
 if __name__ == '__main__':
-    print >> sys.stderr, "Loading %s" % create_pickle_indexes.visual_words_save_to_file
+    print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.visual_words_save_to_file, str(datetime.datetime.now()))
     visual_words_index = pickle.load(open(create_pickle_indexes.visual_words_save_to_file, "r"))
 
-    print >> sys.stderr, "Loading %s" % create_pickle_indexes.query_index_save_to_file
-    query_index = pickle.load(create_pickle_indexes.query_index_save_to_file)
+
+    print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.query_index_save_to_file, str(datetime.datetime.now()))
+    query_index = pickle.load(open(create_pickle_indexes.query_index_save_to_file, "r"))
     
-    print >> sys.stderr, "Loading %s" % create_pickle_indexes.unigramm_index_save_to_file
-    unigramm_index = pickle.load(create_pickle_indexes.unigramm_index_save_to_file)
+    print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.unigramm_index_save_to_file, str(datetime.datetime.now()))
+    unigramm_index = pickle.load(open(create_pickle_indexes.unigramm_index_save_to_file, "r"))
     
-    print >> sys.stderr, "Loading %s" % create_pickle_indexes.bigramm_index_save_to_file
-    bigramm_index = pickle.load(create_pickle_indexes.bigramm_index_save_to_file)
+    print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.bigramm_index_save_to_file, str(datetime.datetime.now()))
+    bigramm_index = pickle.load(open(create_pickle_indexes.bigramm_index_save_to_file, "r"))
     
-    print >> sys.stderr, "Loading %s" % create_pickle_indexes.trigramm_index_save_to_file
-    trigramm_index = pickle.load(create_pickle_indexes.trigramm_index_save_to_file)
+    print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.trigramm_index_save_to_file, str(datetime.datetime.now()))
+    trigramm_index = pickle.load(open(create_pickle_indexes.trigramm_index_save_to_file))
+        
+    print >> sys.stderr, "Loading finished on %s" % str(datetime.datetime.now())
         
     try:
         server = HTTPServer(('', PORT_NUMBER), MyHandler)
