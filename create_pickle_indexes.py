@@ -7,7 +7,7 @@ import codecs
 import itertools
 import collections
 import sys
-import pickle
+import cPickle as pickle
 
 wnl = nltk.WordNetLemmatizer()
 

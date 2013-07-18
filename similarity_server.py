@@ -14,7 +14,7 @@ import os
 import subprocess
 import sys
 import cgi
-import pickle
+import cPickle as pickle
 import datetime
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 
@@ -223,8 +223,8 @@ def CreateVisualModelForQuery(out, query):
     # trying to collect some how relevant pics from click_log_db  
     query_visual_model = {}
 
-    query_lemmas = GetLemmas(query)
-    normalized_query = QueryLemmasToNormalizedQuery(query_lemmas)
+    query_lemmas = create_pickle_indexes.GetLemmas(query)
+    normalized_query = create_pickle_indexes.QueryLemmasToNormalizedQuery(query_lemmas)
 
     out.write("<table><tr><td>%s</td><td>%s</td></tr></table><br/>" % ("query:", query))
     out.write("<table><tr><td>%s</td><td>%s</td></tr></table><br/>" % ("query lemmas:", str(query_lemmas)))
@@ -322,7 +322,7 @@ def CreateVisualModelForQuery(out, query):
     return query_visual_model
 
 def SpellCheckingEnrich(query):
-    query_lemmas = GetLemmas(query)
+    query_lemmas = create_pickle_indexes.GetLemmas(query)
     enriched_lemmas = []
     
     for l in query_lemmas:
@@ -341,7 +341,7 @@ def ExtractVisualWords(image):
     return bag_of_vis_words    
 
 def DumpVisualModel(query, image, visual_model):
-    file_name = QueryLemmasToNormalizedQuery(GetLemmas(query))
+    file_name = create_pickle_indexes.QueryLemmasToNormalizedQuery(create_pickle_indexes.GetLemmas(query))
     file_name += str(random.randint())
     fout = codecs.open(file_name, "w", "utf-8")
     print >> fout, query
@@ -384,19 +384,24 @@ def CalcImageRelevance(out, query, image):
 
 if __name__ == '__main__':
     print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.visual_words_save_to_file, str(datetime.datetime.now()))
+    global visual_words_index
     visual_words_index = pickle.load(open(create_pickle_indexes.visual_words_save_to_file, "r"))
 
 
     print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.query_index_save_to_file, str(datetime.datetime.now()))
+    global query_index
     query_index = pickle.load(open(create_pickle_indexes.query_index_save_to_file, "r"))
     
     print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.unigramm_index_save_to_file, str(datetime.datetime.now()))
+    global unigramm_index
     unigramm_index = pickle.load(open(create_pickle_indexes.unigramm_index_save_to_file, "r"))
     
     print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.bigramm_index_save_to_file, str(datetime.datetime.now()))
+    global bigramm_index
     bigramm_index = pickle.load(open(create_pickle_indexes.bigramm_index_save_to_file, "r"))
     
     print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.trigramm_index_save_to_file, str(datetime.datetime.now()))
+    global trigramm_index
     trigramm_index = pickle.load(open(create_pickle_indexes.trigramm_index_save_to_file))
         
     print >> sys.stderr, "Loading finished on %s" % str(datetime.datetime.now())
