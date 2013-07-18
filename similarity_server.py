@@ -363,7 +363,7 @@ def CalcImageRelevance(out, query, image):
     
     DrawPics(out, "Visual query model.", query_visual_model)
     
-    DumpVisualModel(query, image, visual_model)
+    DumpVisualModel(query, image, query_visual_model)
     
     relevance = 0.0
     
@@ -385,20 +385,20 @@ def CalcImageRelevance(out, query, image):
 if __name__ == '__main__':
     print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.visual_words_save_to_file, str(datetime.datetime.now()))
     global visual_words_index
-    visual_words_index = pickle.load(open(create_pickle_indexes.visual_words_save_to_file, "r"))
+    visual_words_index = pickle.load(open(create_pickle_indexes.visual_words_save_to_file, "rb"))
 
 
     print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.query_index_save_to_file, str(datetime.datetime.now()))
     global query_index
-    query_index = pickle.load(open(create_pickle_indexes.query_index_save_to_file, "r"))
+    query_index = pickle.load(open(create_pickle_indexes.query_index_save_to_file, "rb"))
     
     print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.unigramm_index_save_to_file, str(datetime.datetime.now()))
     global unigramm_index
-    unigramm_index = pickle.load(open(create_pickle_indexes.unigramm_index_save_to_file, "r"))
+    unigramm_index = pickle.load(open(create_pickle_indexes.unigramm_index_save_to_file, "rb"))
     
     print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.bigramm_index_save_to_file, str(datetime.datetime.now()))
     global bigramm_index
-    bigramm_index = pickle.load(open(create_pickle_indexes.bigramm_index_save_to_file, "r"))
+    bigramm_index = pickle.load(open(create_pickle_indexes.bigramm_index_save_to_file, "rb"))
     
     print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.trigramm_index_save_to_file, str(datetime.datetime.now()))
     global trigramm_index
