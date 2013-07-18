@@ -342,7 +342,7 @@ def ExtractVisualWords(image):
 
 def DumpVisualModel(query, image, visual_model):
     file_name = create_pickle_indexes.QueryLemmasToNormalizedQuery(create_pickle_indexes.GetLemmas(query))
-    file_name += str(random.randint())
+    file_name += str(random.randint(0, 100000))
     fout = codecs.open(file_name, "w", "utf-8")
     print >> fout, query
     print >> fout, image
