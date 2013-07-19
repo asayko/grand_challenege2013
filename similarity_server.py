@@ -28,7 +28,8 @@ click_images_dir = "/Users/asayko/data/grand_challenge/Train/images_jpeg_renamed
 
 online_vis_words_extractor = subprocess.Popen('./online_vis_words_extractor', stdin = subprocess.PIPE, stdout = subprocess.PIPE)
 
-external_relevance_calcer = subprocess.Popen('./histextract -v vocabs/vocab_l2_32768.dat -c -p -b -m 10000', stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+external_relevance_calcer = subprocess.Popen(['./histextract', '-v', 'vocabs/vocab_l2_32768.dat', '-p', '-b', '-m', '10000', '-c', 'cache'],\
+                                              stdin = subprocess.PIPE, stdout = subprocess.PIPE)
 
 logs_dir = "./logs/"
 if not os.path.exists(logs_dir): os.makedirs(logs_dir)
@@ -110,8 +111,9 @@ class MyHandler(BaseHTTPRequestHandler):
                 #self.PrintOutInputForm()
                 query = form.getvalue("query", "default")
                 image = form.getvalue("image", "default")
-                request_img_id = form.getvalue("img_id", "default") 
-                relev = CalcImageRelevance(sys.stderr, query, image, request_img_id)
+                request_img_id = form.getvalue("img_id", "default")
+                rel_label = form.getvalue("rel_label", "default")
+                relev = CalcImageRelevance(sys.stderr, query, image, request_img_id, rel_label)
                 self.wfile.write(relev)
         #self.PrintOutInputForm()
         #self.wfile.write("</body></html>")
@@ -346,12 +348,12 @@ def ExtractVisualWords(image):
     bag_of_vis_words = sorted([int(w) for w in vis_words_line.split()])
     return bag_of_vis_words    
 
-def DumpVisualModel(query, image, visual_model, request_img_id):
+def DumpVisualModel(query, image, visual_model, request_img_id, rel_label):
     #file_name = logs_dir + create_pickle_indexes.QueryLemmasToNormalizedQuery(create_pickle_indexes.GetLemmas(query))
     #file_name += str(random.randint(0, 100000))
     file_name = "data_for_external_relevance_calcer"
     fout = codecs.open(file_name, "w", "utf-8")
-    print >> fout, "%s img_id: %s, img_file:%s.jpeg" (query, request_img_id, escape_image_id_to_be_valid_filename(request_img_id))
+    print >> fout, "%s img_id: %s, img_file:%s.jpeg Relevance: %s" % (query, request_img_id, escape_image_id_to_be_valid_filename(request_img_id), rel_label)
     print >> fout, image
     for pic in visual_model:
         print >> fout, "%s.jpeg, %s, %lf" % (escape_image_id_to_be_valid_filename(pic), pic, 1.0)
@@ -363,7 +365,7 @@ def CalcExternalRelevance(model_file):
     rel = float(external_relevance_calcer.stdout.readline().strip())
     return rel
 
-def CalcImageRelevance(out, query, image, request_img_id):
+def CalcImageRelevance(out, query, image, request_img_id, rel_label):
     
     #image_bag_of_visual_words = ExtractVisualWords(image)
     #out.write("<p>visual words: %s</p>" % str(image_bag_of_visual_words))
@@ -376,7 +378,7 @@ def CalcImageRelevance(out, query, image, request_img_id):
     
     DrawPics(out, "Visual query model.", query_visual_model)
     
-    model_file = DumpVisualModel(query, image, query_visual_model, request_img_id)
+    model_file = DumpVisualModel(query, image, query_visual_model, request_img_id, rel_label)
     
     relevance = 0.0
     relevance = CalcExternalRelevance(model_file)

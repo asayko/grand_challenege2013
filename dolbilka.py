@@ -24,8 +24,8 @@ def LoadQueries(labeled_queries_file):
         labeled_queries.setdefault(query, []).append((img_id, label))
     return labeled_queries
 
-def GetRelevanceForQuery(query, img_id, img_base64, server_path, url_selector):
-    params = urllib.urlencode({'runID': 0, 'query': query, 'image': img_base64, 'img_id': img_id})
+def GetRelevanceForQuery(query, img_id, img_base64, server_path, url_selector, rel_label):
+    params = urllib.urlencode({'runID': 0, 'query': query, 'image': img_base64, 'img_id': img_id, 'rel': rel_label})
     headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
     conn = httplib.HTTPConnection(server_path)
     print >> sys.stderr, "Requesting %s%s for query %s with img %s:%s..." % (server_path, url_selector, query, img_id, img_base64[:10])
@@ -83,7 +83,7 @@ if __name__ == '__main__':
         metric_source_data = []
         for (img_id, label) in random.sample(labels, min(n_random_pics, len(labels))):
             img_base64 = images[img_id]
-            rel = GetRelevanceForQuery(query, img_id, img_base64, server_path, url_selector)
+            rel = GetRelevanceForQuery(query, img_id, img_base64, server_path, url_selector, label)
             metric_source_data.append((rel, label))
         print metric_source_data
         metric = CalcMetric(metric_source_data)
