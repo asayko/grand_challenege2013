@@ -350,7 +350,7 @@ def DumpVisualModel(query, image, visual_model):
     print >> fout, query
     print >> fout, image
     for pic in visual_model:
-        print >> fout, pic
+        print >> fout, "%s.jpeg, %s, %lf" % (escape_image_id_to_be_valid_filename(pic), pic, 1.0)
     fout.close()
 
 def CalcImageRelevance(out, query, image):
