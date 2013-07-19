@@ -28,6 +28,9 @@ click_images_dir = "/Users/asayko/data/grand_challenge/Train/images_jpeg_renamed
 
 online_vis_words_extractor = subprocess.Popen('./online_vis_words_extractor', stdin = subprocess.PIPE, stdout = subprocess.PIPE)
 
+logs_dir = "./logs/"
+if not os.path.exists(logs_dir): os.makedirs(logs_dir)
+
 PORT_NUMBER = 8080
 
 MIN_POSSIBLE_VISUAL_MODEL_SIZE = 3
@@ -343,7 +346,7 @@ def ExtractVisualWords(image):
 def DumpVisualModel(query, image, visual_model):
     file_name = create_pickle_indexes.QueryLemmasToNormalizedQuery(create_pickle_indexes.GetLemmas(query))
     file_name += str(random.randint(0, 100000))
-    fout = codecs.open(file_name, "w", "utf-8")
+    fout = codecs.open(logs_dir + file_name, "w", "utf-8")
     print >> fout, query
     print >> fout, image
     for pic in visual_model:
