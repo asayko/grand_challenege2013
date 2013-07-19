@@ -28,6 +28,8 @@ click_images_dir = "/Users/asayko/data/grand_challenge/Train/images_jpeg_renamed
 
 online_vis_words_extractor = subprocess.Popen('./online_vis_words_extractor', stdin = subprocess.PIPE, stdout = subprocess.PIPE)
 
+external_relevance_calcer = subprocess.Popen('./histextract -v vocabs/vocab_l2_32768.dat -c -p -b -m 10000', stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+
 logs_dir = "./logs/"
 if not os.path.exists(logs_dir): os.makedirs(logs_dir)
 
@@ -345,19 +347,26 @@ def ExtractVisualWords(image):
     return bag_of_vis_words    
 
 def DumpVisualModel(query, image, visual_model, request_img_id):
-    file_name = create_pickle_indexes.QueryLemmasToNormalizedQuery(create_pickle_indexes.GetLemmas(query))
-    file_name += str(random.randint(0, 100000))
-    fout = codecs.open(logs_dir + file_name, "w", "utf-8")
-    print >> fout, "%s (img_id: %s, img_file:%s.jpeg)" (query, request_img_id, escape_image_id_to_be_valid_filename(request_img_id))
+    #file_name = logs_dir + create_pickle_indexes.QueryLemmasToNormalizedQuery(create_pickle_indexes.GetLemmas(query))
+    #file_name += str(random.randint(0, 100000))
+    file_name = "data_for_external_relevance_calcer"
+    fout = codecs.open(file_name, "w", "utf-8")
+    print >> fout, "%s img_id: %s, img_file:%s.jpeg" (query, request_img_id, escape_image_id_to_be_valid_filename(request_img_id))
     print >> fout, image
     for pic in visual_model:
         print >> fout, "%s.jpeg, %s, %lf" % (escape_image_id_to_be_valid_filename(pic), pic, 1.0)
     fout.close()
+    return file_name
+
+def CalcExternalRelevance(model_file):
+    external_relevance_calcer.stdin.write("%s\n" % model_file)
+    rel = float(external_relevance_calcer.stdout.readline().strip())
+    return rel
 
 def CalcImageRelevance(out, query, image, request_img_id):
     
-    image_bag_of_visual_words = ExtractVisualWords(image)
-    out.write("<p>visual words: %s</p>" % str(image_bag_of_visual_words))
+    #image_bag_of_visual_words = ExtractVisualWords(image)
+    #out.write("<p>visual words: %s</p>" % str(image_bag_of_visual_words))
     
     query_visual_model = CreateVisualModelForQuery(out, query)
     
@@ -367,10 +376,12 @@ def CalcImageRelevance(out, query, image, request_img_id):
     
     DrawPics(out, "Visual query model.", query_visual_model)
     
-    DumpVisualModel(query, image, query_visual_model, request_img_id)
+    model_file = DumpVisualModel(query, image, query_visual_model, request_img_id)
     
     relevance = 0.0
+    relevance = CalcExternalRelevance(model_file)
     
+    """
     for clicked_pic in query_visual_model.keys():
         clicked_pic_vis_words = visual_words_index[clicked_pic]
         clicked_pic_vis_words_len = float(sum(clicked_pic_vis_words.values()))
@@ -383,7 +394,7 @@ def CalcImageRelevance(out, query, image, request_img_id):
         
         if union_len != 0.0:
             relevance = relevance + pow(20, intersection_len / union_len) - 1.0
-        
+    """ 
     return relevance
 
 if __name__ == '__main__':
