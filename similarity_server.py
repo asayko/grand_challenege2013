@@ -108,7 +108,8 @@ class MyHandler(BaseHTTPRequestHandler):
                 #self.PrintOutInputForm()
                 query = form.getvalue("query", "default")
                 image = form.getvalue("image", "default")
-                relev = CalcImageRelevance(sys.stderr, query, image)
+                request_img_id = form.getvalue("img_id", "default") 
+                relev = CalcImageRelevance(sys.stderr, query, image, request_img_id)
                 self.wfile.write(relev)
         #self.PrintOutInputForm()
         #self.wfile.write("</body></html>")
@@ -343,17 +344,17 @@ def ExtractVisualWords(image):
     bag_of_vis_words = sorted([int(w) for w in vis_words_line.split()])
     return bag_of_vis_words    
 
-def DumpVisualModel(query, image, visual_model):
+def DumpVisualModel(query, image, visual_model, request_img_id):
     file_name = create_pickle_indexes.QueryLemmasToNormalizedQuery(create_pickle_indexes.GetLemmas(query))
     file_name += str(random.randint(0, 100000))
     fout = codecs.open(logs_dir + file_name, "w", "utf-8")
-    print >> fout, query
+    print >> fout, "%s (img_id: %s, img_file:%s.jpeg)" (query, request_img_id, escape_image_id_to_be_valid_filename(request_img_id))
     print >> fout, image
     for pic in visual_model:
         print >> fout, "%s.jpeg, %s, %lf" % (escape_image_id_to_be_valid_filename(pic), pic, 1.0)
     fout.close()
 
-def CalcImageRelevance(out, query, image):
+def CalcImageRelevance(out, query, image, request_img_id):
     
     image_bag_of_visual_words = ExtractVisualWords(image)
     out.write("<p>visual words: %s</p>" % str(image_bag_of_visual_words))
@@ -366,7 +367,7 @@ def CalcImageRelevance(out, query, image):
     
     DrawPics(out, "Visual query model.", query_visual_model)
     
-    DumpVisualModel(query, image, query_visual_model)
+    DumpVisualModel(query, image, query_visual_model, request_img_id)
     
     relevance = 0.0
     

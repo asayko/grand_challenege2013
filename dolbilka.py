@@ -25,7 +25,7 @@ def LoadQueries(labeled_queries_file):
     return labeled_queries
 
 def GetRelevanceForQuery(query, img_id, img_base64, server_path, url_selector):
-    params = urllib.urlencode({'runID': 0, 'query': query, 'image': img_base64})
+    params = urllib.urlencode({'runID': 0, 'query': query, 'image': img_base64, 'img_id': img_id})
     headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
     conn = httplib.HTTPConnection(server_path)
     print >> sys.stderr, "Requesting %s%s for query %s with img %s:%s..." % (server_path, url_selector, query, img_id, img_base64[:10])
