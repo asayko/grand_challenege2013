@@ -11,7 +11,7 @@ import cPickle as pickle
 
 wnl = nltk.WordNetLemmatizer()
 
-click_log_file = "/Users/asayko/data/grand_challenge/Train/TrainClickLog10K.tsv"
+click_log_file = "/Users/asayko/data/grand_challenge/Train/TrainClickLog100K.tsv"
 visual_words_file = "./vis_words_10000.tsv"
 
 query_index_save_to_file = "./query_index.pkl"
@@ -55,8 +55,10 @@ def QueryLemmasToNormalizedQuery(query_lemmas):
 def is_ascii(s):
     return all(ord(c) < 128 for c in s)
 
-def PutToIndex(index, key, img_id):
-    index.setdefault(key, set()).add(img_id) 
+def PutToIndex(index, key, img_id, num_clicks):
+    counters = index.setdefault(key, {}).setdefault(img_id, [0, 0]) # [num_total_clicks, num_total_queries]
+    counters[0] += num_clicks
+    counters[1] += 1
 
 def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
     fin = codecs.open(click_log_file, "r", "utf-8")
@@ -83,25 +85,25 @@ def ParseClickLogAndCreateNGrammsIndexes(click_log_file):
         query_lemmas = GetLemmas(query)
         normalized_query = QueryLemmasToNormalizedQuery(query_lemmas)
 
-        PutToIndex(query_index, normalized_query, img_id)
+        PutToIndex(query_index, normalized_query, img_id, clicks_num)
 
         if img_id not in dont_load_unigramms_for_img_ids:
             for lemma in query_lemmas:
                 if lemma in unigramm_stop_words: continue
                 unigramm = "%s" % lemma
-                PutToIndex(unigramm_index, unigramm, img_id)
+                PutToIndex(unigramm_index, unigramm, img_id, clicks_num)
 
         if img_id not in dont_load_bigramms_for_img_ids:
             for bigramm in itertools.combinations(query_lemmas, 2):
                 b = sorted(bigramm)
                 bigramm = "%s %s" % (b[0], b[1])
-                PutToIndex(bigramm_index, bigramm, img_id)
+                PutToIndex(bigramm_index, bigramm, img_id, clicks_num)
         
         if img_id not in dont_load_trigramms_for_img_ids:
             for trigramm in itertools.combinations(query_lemmas, 3):
                 t = sorted(trigramm)
                 trigramm = "%s %s %s" % (t[0], t[1], t[2])
-                PutToIndex(trigramm_index, trigramm, img_id)    
+                PutToIndex(trigramm_index, trigramm, img_id, clicks_num)
         num_lines_processed = num_lines_processed + 1
         
     return query_index, unigramm_index, bigramm_index, trigramm_index
@@ -132,23 +134,23 @@ if __name__ == "__main__":
     dont_load_bigramms_for_img_ids = set([t.strip() for t in codecs.open(dont_load_bigramms_for_img_ids_file, "r", "utf-8")])
     dont_load_trigramms_for_img_ids = set([t.strip() for t in codecs.open(dont_load_trigramms_for_img_ids_file, "r", "utf-8")])
     
-    visual_words_index = ParseVisualWordsBase(visual_words_file)
+    #visual_words_index = ParseVisualWordsBase(visual_words_file)
     
-    print >> sys.stderr, "Saving %s" % visual_words_save_to_file
-    pickle.dump(visual_words_index, open(visual_words_save_to_file, "w"))
+    #print >> sys.stderr, "Saving %s" % visual_words_save_to_file
+    #pickle.dump(visual_words_index, open(visual_words_save_to_file, "wb"))
     
     query_index, unigramm_index, bigramm_index, trigramm_index = ParseClickLogAndCreateNGrammsIndexes(click_log_file)
 
     print >> sys.stderr, "Saving %s" % query_index_save_to_file
-    pickle.dump(query_index, open(query_index_save_to_file, "w"))
+    pickle.dump(query_index, open(query_index_save_to_file, "wb"))
     
     print >> sys.stderr, "Saving %s" % unigramm_index_save_to_file
-    pickle.dump(unigramm_index, open(unigramm_index_save_to_file, "w"))
+    pickle.dump(unigramm_index, open(unigramm_index_save_to_file, "wb"))
     
     print >> sys.stderr, "Saving %s" % bigramm_index_save_to_file
-    pickle.dump(unigramm_index, open(bigramm_index_save_to_file, "w"))
+    pickle.dump(unigramm_index, open(bigramm_index_save_to_file, "wb"))
 
     print >> sys.stderr, "Saving %s" % trigramm_index_save_to_file
-    pickle.dump(unigramm_index, open(trigramm_index_save_to_file, "w"))
+    pickle.dump(unigramm_index, open(trigramm_index_save_to_file, "wb"))
 
 
