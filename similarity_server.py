@@ -16,6 +16,7 @@ import sys
 import cgi
 import cPickle as pickle
 import datetime
+import heapq
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 
 import create_pickle_indexes
@@ -28,8 +29,8 @@ click_images_dir = "/Users/asayko/data/grand_challenge/Train/images_jpeg_renamed
 
 online_vis_words_extractor = subprocess.Popen('./online_vis_words_extractor', stdin = subprocess.PIPE, stdout = subprocess.PIPE)
 
-external_relevance_calcer = subprocess.Popen(['./histextract', '-v', 'vocabs/vocab_l2_32768.dat', '-p', '-b', '-m', '10000', '-c', 'cache'],\
-                                              stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+#external_relevance_calcer = subprocess.Popen(['./histextract', '-v', 'vocabs/vocab_l2_32768.dat', '-p', '-b', '-m', '10000', '-c', 'cache'],\
+#                                              stdin = subprocess.PIPE, stdout = subprocess.PIPE)
 
 logs_dir = "./logs/"
 if not os.path.exists(logs_dir): os.makedirs(logs_dir)
@@ -37,7 +38,7 @@ if not os.path.exists(logs_dir): os.makedirs(logs_dir)
 PORT_NUMBER = 8080
 
 MIN_POSSIBLE_VISUAL_MODEL_SIZE = 3
-ENOUGH_VISUAL_MODEL_SIZE = 100
+ENOUGH_VISUAL_MODEL_SIZE = 1000
 
 QUERY_NORMALIZED_QUERY_MATCH = 'QUERY_NORMALIZED_QUERY_MATCH'
 QUERY_LEMMA_MATCH = 'QUERY_LEMMA_MATCH'
@@ -102,21 +103,16 @@ class MyHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type','text/plain')
         self.end_headers()
-        #self.wfile.write("<html><body>")
         if self.path == "/imagerank":
-            #if not form.has_key("runID") or not form.has_key("query") or not form.has_key("image"):
             if not form.has_key("query") or not form.has_key("image"):
                 self.wfile.write("Missing required parameter.")
             else:
-                #self.PrintOutInputForm()
                 query = form.getvalue("query", "default")
                 image = form.getvalue("image", "default")
                 request_img_id = form.getvalue("img_id", "default")
                 rel_label = form.getvalue("rel_label", "default")
-                relev = CalcImageRelevance(sys.stderr, query, image, request_img_id, rel_label)
+                relev = CalcImageRelevance(query, image, request_img_id, rel_label)
                 self.wfile.write(relev)
-        #self.PrintOutInputForm()
-        #self.wfile.write("</body></html>")
         return
 
 def escape_image_id_to_be_valid_filename(image_id):
@@ -214,29 +210,50 @@ def ExpandTrigramms(query_lemmas, expanded_lemmas):
             
     return trigramms_to_analyze
 
-def DrawPics(out, caption, pics_to_ngramms):
-    out.write("<p>")
-    out.write("<h1>%s</h1>" % caption)
-    out.write("<h3>%d images totally</h3>" % len(pics_to_ngramms.keys()))
-    out.write("<table>")
-    keys_to_draw = random.sample(pics_to_ngramms.keys(), min(len(pics_to_ngramms.keys()), 50))     
-    for pic in keys_to_draw:
-        out.write("<tr>")
-        out.write("<td><img src=\"imageget/%s\"></td>" % escape_image_id_to_be_valid_filename(pic))
-        out.write("<td>%d %s</td>" % (len(pics_to_ngramms[pic]), str(pics_to_ngramms[pic])))
-        out.write("</tr>")
-    out.write("</table>")
+def ClickCounterTuppleToEmpiricalRelevance(ngramm, match_type, cliks_num, queries_num):
+    click_rel = np.log(cliks_num) * queries_num
+    num_of_lemmas = len([w for w in ngramm.split()])
+    num_of_nouns = len([w for w in ngramm.split() if nltk.pos_tag([w])[-1][-1] in noun_like_unigramm_pos_tags]) + 1e-3
 
-def CreateVisualModelForQuery(out, query):
+    if match_type == QUERY_NORMALIZED_QUERY_MATCH:
+        return click_rel * 1e5 
+    
+    elif match_type == QUERY_TRIGRAMM_LEMMA_MATCH:
+        return click_rel * 1e4
+    elif match_type == QUERY_TRIGRAMM_LEMMA_SYNSET_MATCH:
+        return click_rel * num_of_nouns * 1e3
+    elif match_type == QUERY_TRIGRAMM_SYNSET_MATCH:
+        return click_rel * num_of_nouns * 1e2
+    
+    elif match_type == QUERY_BIGRAMM_LEMMA_MATCH:
+        return click_rel * num_of_nouns * 1e3
+    elif match_type == QUERY_BIGRAMM_LEMMA_SYNSET_MATCH:
+        return click_rel * num_of_nouns * 1e1
+    elif match_type == QUERY_BIGRAMM_SYNSET_MATCH:
+        return click_rel * num_of_nouns * 1e0
+
+    elif match_type == QUERY_UNIGRAMM_LEMMA_MATCH:
+        return click_rel * num_of_nouns * 1e-1
+    
+    elif match_type == QUERY_UNIGRAMM_SYNSET_MATCH:
+        return click_rel * num_of_nouns * 1e-2
+
+    #rel = -0.0591716 * pow(queries_num, 2) + 1.65680473 * queries_num - 1.59763314;
+    return rel
+
+def AddPicCounters(visual_query_model, pic_counters, ngramm, match_type): 
+    for pic in pic_counters:
+        cliks_num = pic_counters[pic][0]
+        queries_num = pic_counters[pic][1]
+        visual_query_model.setdefault(pic, 0.0)
+        visual_query_model[pic] = visual_query_model[pic] + ClickCounterTuppleToEmpiricalRelevance(ngramm, match_type, cliks_num, queries_num)
+
+def CreateVisualModelForQuery(query):
     # trying to collect some how relevant pics from click_log_db  
-    query_visual_model = {}
+    visual_query_model = {}
 
     query_lemmas = create_pickle_indexes.GetLemmas(query)
     normalized_query = create_pickle_indexes.QueryLemmasToNormalizedQuery(query_lemmas)
-
-    out.write("<table><tr><td>%s</td><td>%s</td></tr></table><br/>" % ("query:", query))
-    out.write("<table><tr><td>%s</td><td>%s</td></tr></table><br/>" % ("query lemmas:", str(query_lemmas)))
-    out.write("<table><tr><td>%s</td><td>%s</td></tr></table><br/>" % ("normalized query:", normalized_query))
 
     expanded_lemmas = {}
     for lemma in query_lemmas:
@@ -247,87 +264,34 @@ def CreateVisualModelForQuery(out, query):
     trigramms_to_analyze = ExpandTrigramms(query_lemmas, expanded_lemmas)
 
     # adding norm query matches
-    for pic in query_index.get(normalized_query, set()):
-         query_visual_model.setdefault(pic, set()).add(QUERY_NORMALIZED_QUERY_MATCH)
+    AddPicCounters(visual_query_model, query_index.get(normalized_query, {}), normalized_query, QUERY_NORMALIZED_QUERY_MATCH)
     
-    # ading trigramms lemma and synset_lemma matches
+    # adding trigramms
     for (trigramm, match_type) in trigramms_to_analyze:
         if trigramm in trigramm_index and match_type == QUERY_LEMMA_MATCH:
-            for pic in trigramm_index[trigramm]:
-                query_visual_model.setdefault(pic, set()).add(QUERY_TRIGRAMM_LEMMA_MATCH)
+            AddPicCounters(visual_query_model, trigramm_index[trigramm], trigramm, QUERY_TRIGRAMM_LEMMA_MATCH)
         elif trigramm in trigramm_index and match_type == QUERY_LEMMA_SYNSET_MATCH:
-            for pic in trigramm_index[trigramm]:
-                query_visual_model.setdefault(pic, set()).add(QUERY_TRIGRAMM_LEMMA_SYNSET_MATCH)
-                
-    # adding bigramms lemma matches
+            AddPicCounters(visual_query_model, trigramm_index[trigramm], trigramm, QUERY_TRIGRAMM_LEMMA_SYNSET_MATCH)
+        elif trigramm in trigramm_index and match_type == QUERY_SYNSET_MATCH:
+            AddPicCounters(visual_query_model, trigramm_index[trigramm], trigramm, QUERY_TRIGRAMM_SYNSET_MATCH)
+
+    # adding bigramms
     for (bigramm, match_type) in bigramms_to_analyze:
         if bigramm in bigramm_index and match_type == QUERY_LEMMA_MATCH:
-             for pic in bigramm_index[bigramm]:
-                 query_visual_model.setdefault(pic, set()).add(QUERY_BIGRAMM_LEMMA_MATCH)
-    
-    # if we have enough then stop
-    if len(query_visual_model) > ENOUGH_VISUAL_MODEL_SIZE:
-        return query_visual_model
+            AddPicCounters(visual_query_model, bigramm_index[bigramm], bigramm, QUERY_BIGRAMM_LEMMA_MATCH)
+        elif bigramm in bigramm_index and match_type == QUERY_LEMMA_SYNSET_MATCH:
+            AddPicCounters(visual_query_model, bigramm_index[bigramm], bigramm, QUERY_BIGRAMM_LEMMA_SYNSET_MATCH)
+        elif bigramm in bigramm_index and match_type == QUERY_SYNSET_MATCH:
+            AddPicCounters(visual_query_model, bigramm_index[bigramm], bigramm, QUERY_BIGRAMM_SYNSET_MATCH)
     
     # add most valuable unigramms
     for (unigramm, match_type) in unigramms_to_analyze:
         if unigramm in unigramm_index and match_type == QUERY_LEMMA_MATCH:
-            pos = nltk.pos_tag([unigramm])[-1][-1]
-            if pos in noun_like_unigramm_pos_tags:
-                for pic in unigramm_index[unigramm]:
-                    query_visual_model.setdefault(pic, set()).add(QUERY_UNIGRAMM_LEMMA_NN_MATCH)
-    
-    # adding bigramms lemma synset matches
-    for (bigramm, match_type) in bigramms_to_analyze:
-        if bigramm in bigramm_index and match_type == QUERY_LEMMA_SYNSET_MATCH:
-             for pic in bigramm_index[bigramm]:
-                 query_visual_model.setdefault(pic, set()).add(QUERY_BIGRAMM_LEMMA_SYNSET_MATCH)
-
-    # if we have enough then stop
-    if len(query_visual_model) > ENOUGH_VISUAL_MODEL_SIZE:
-        return query_visual_model
-
-    # adding trigramms synset synset synset
-    for (trigramm, match_type) in trigramms_to_analyze:
-        if trigramm in trigramm_index and match_type == QUERY_SYNSET_MATCH:
-            for pic in trigramm_index[trigramm]:
-                query_visual_model.setdefault(pic, set()).add(QUERY_TRIGRAMM_SYNSET_MATCH)
-
-    # adding bigramms lemma matches
-    for (bigramm, match_type) in bigramms_to_analyze:
-        if bigramm in bigramm_index and match_type == QUERY_SYNSET_MATCH:
-             for pic in bigramm_index[bigramm]:
-                 query_visual_model.setdefault(pic, set()).add(QUERY_BIGRAMM_SYNSET_MATCH)
-
-    # if we have enough then stop
-    if len(query_visual_model) > ENOUGH_VISUAL_MODEL_SIZE:
-        return query_visual_model
-
-    # add most valuable synset unigramms
-    for (unigramm, match_type) in unigramms_to_analyze:
-        if unigramm in unigramm_index and match_type == QUERY_SYNSET_MATCH:
-            pos = nltk.pos_tag([unigramm])[-1][-1]
-            if pos in noun_like_unigramm_pos_tags:
-                for pic in unigramm_index[unigramm]:
-                    query_visual_model.setdefault(pic, set()).add(QUERY_UNIGRAMM_SYNSET_NN_MATCH)    
-
-    # if we have enough then stop
-    if len(query_visual_model) > ENOUGH_VISUAL_MODEL_SIZE:
-        return query_visual_model
-
-    # add all lemma unigramms
-    for (unigramm, match_type) in unigramms_to_analyze:
-        if unigramm in unigramm_index and match_type == QUERY_LEMMA_MATCH:
-            for pic in unigramm_index[unigramm]:
-                query_visual_model.setdefault(pic, set()).add(QUERY_UNIGRAMM_LEMMA_MATCH)
-
-    # add all synset unigramms
-    for (unigramm, match_type) in unigramms_to_analyze:
-        if unigramm in unigramm_index and match_type == QUERY_SYNSET_MATCH:
-            for pic in unigramm_index[unigramm]:
-                query_visual_model.setdefault(pic, set()).add(QUERY_UNIGRAMM_SYNSET_MATCH)    
+            AddPicCounters(visual_query_model, unigramm_index[unigramm], unigramm, QUERY_UNIGRAMM_LEMMA_MATCH)
+        elif unigramm in unigramm_index and match_type == QUERY_SYNSET_MATCH:
+            AddPicCounters(visual_query_model, unigramm_index[unigramm], unigramm, QUERY_UNIGRAMM_SYNSET_MATCH)
             
-    return query_visual_model
+    return visual_query_model
 
 def SpellCheckingEnrich(query):
     query_lemmas = create_pickle_indexes.GetLemmas(query)
@@ -348,37 +312,57 @@ def ExtractVisualWords(image):
     bag_of_vis_words = sorted([int(w) for w in vis_words_line.split()])
     return bag_of_vis_words    
 
-def DumpVisualModel(query, image, visual_model, request_img_id, rel_label):
-    #file_name = logs_dir + create_pickle_indexes.QueryLemmasToNormalizedQuery(create_pickle_indexes.GetLemmas(query))
-    #file_name += str(random.randint(0, 100000))
-    file_name = "data_for_external_relevance_calcer"
+def DumpVisualModel(query, image, visual_model, request_img_id, rel_label, pretty_logs = False):
+    
+    file_name = logs_dir + create_pickle_indexes.QueryLemmasToNormalizedQuery(create_pickle_indexes.GetLemmas(query))
+    file_name += str(random.randint(0, 100000))
+    #file_name = "data_for_external_relevance_calcer"
     fout = codecs.open(file_name, "w", "utf-8")
+    
+    if pretty_logs:
+        print fout, "<html><body><p>"
+    
     print >> fout, "%s img_id: %s, img_file:%s.jpeg Relevance: %s" % (query, request_img_id, escape_image_id_to_be_valid_filename(request_img_id), rel_label)
+
+    if pretty_logs:
+        print fout, "</p><p>"
+
     print >> fout, image
-    for pic in visual_model:
-        print >> fout, "%s.jpeg, %s, %lf" % (escape_image_id_to_be_valid_filename(pic), pic, 1.0)
+
+    if pretty_logs:
+        print fout, "</p><p><table>"
+        
+    for pic, rel in visual_model:
+        if pretty_logs:
+            print >> fout, '<tr><td><img src="http://imgrover2.yandex.ru:8080/imageget/%s"></td><td> %s, %lf</td></tr>' % (escape_image_id_to_be_valid_filename(pic), pic, rel)
+        else:
+            print >> fout, "%s.jpeg, %s, %lf" % (escape_image_id_to_be_valid_filename(pic), pic, rel)
+
+    if pretty_logs:
+        print fout, "</table></p></body><html>\n"
+
     fout.close()
     return file_name
 
 def CalcExternalRelevance(model_file):
-    external_relevance_calcer.stdin.write("%s\n" % model_file)
-    rel = float(external_relevance_calcer.stdout.readline().strip())
-    return rel
+    #external_relevance_calcer.stdin.write("%s\n" % model_file)
+    #rel = float(external_relevance_calcer.stdout.readline().strip())
+    return 0.777
 
-def CalcImageRelevance(out, query, image, request_img_id, rel_label):
+def CalcImageRelevance(query, image, request_img_id, rel_label):
     
     #image_bag_of_visual_words = ExtractVisualWords(image)
-    #out.write("<p>visual words: %s</p>" % str(image_bag_of_visual_words))
     
-    query_visual_model = CreateVisualModelForQuery(out, query)
+    query_visual_model = CreateVisualModelForQuery(query)
     
     if len(query_visual_model) < MIN_POSSIBLE_VISUAL_MODEL_SIZE:
         query = SpellCheckingEnrich(query)
         query_visual_model = CreateVisualModelForQuery(out, query)
     
-    DrawPics(out, "Visual query model.", query_visual_model)
+    query_visual_model_trunkated = heapq.nlargest(min(ENOUGH_VISUAL_MODEL_SIZE, len(query_visual_model)),\
+                                                  query_visual_model.items(), key = lambda x: x[1])
     
-    model_file = DumpVisualModel(query, image, query_visual_model, request_img_id, rel_label)
+    model_file = DumpVisualModel(query, image, query_visual_model_trunkated, request_img_id, rel_label)
     
     relevance = 0.0
     relevance = CalcExternalRelevance(model_file)
@@ -400,10 +384,9 @@ def CalcImageRelevance(out, query, image, request_img_id, rel_label):
     return relevance
 
 if __name__ == '__main__':
-    print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.visual_words_save_to_file, str(datetime.datetime.now()))
-    global visual_words_index
-    visual_words_index = pickle.load(open(create_pickle_indexes.visual_words_save_to_file, "rb"))
-
+    #print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.visual_words_save_to_file, str(datetime.datetime.now()))
+    #global visual_words_index
+    #visual_words_index = pickle.load(open(create_pickle_indexes.visual_words_save_to_file, "rb"))
 
     print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.query_index_save_to_file, str(datetime.datetime.now()))
     global query_index
