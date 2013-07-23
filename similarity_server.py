@@ -17,6 +17,7 @@ import cgi
 import cPickle as pickle
 import datetime
 import heapq
+import time
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 
 import create_pickle_indexes
@@ -38,7 +39,7 @@ if not os.path.exists(logs_dir): os.makedirs(logs_dir)
 PORT_NUMBER = 8080
 
 MIN_POSSIBLE_VISUAL_MODEL_SIZE = 3
-ENOUGH_VISUAL_MODEL_SIZE = 1000
+ENOUGH_VISUAL_MODEL_SIZE = 100
 
 QUERY_NORMALIZED_QUERY_MATCH = 'QUERY_NORMALIZED_QUERY_MATCH'
 QUERY_LEMMA_MATCH = 'QUERY_LEMMA_MATCH'
@@ -213,7 +214,7 @@ def ExpandTrigramms(query_lemmas, expanded_lemmas):
 def ClickCounterTuppleToEmpiricalRelevance(ngramm, match_type, cliks_num, queries_num):
     click_rel = np.log(cliks_num) * queries_num
     num_of_lemmas = len([w for w in ngramm.split()])
-    num_of_nouns = len([w for w in ngramm.split() if nltk.pos_tag([w])[-1][-1] in noun_like_unigramm_pos_tags]) + 1e-3
+    num_of_nouns = NGrammToNumOfNouns(ngramm) + 1e-3
 
     if match_type == QUERY_NORMALIZED_QUERY_MATCH:
         return click_rel * 1e5 
@@ -248,9 +249,28 @@ def AddPicCounters(visual_query_model, pic_counters, ngramm, match_type):
         visual_query_model.setdefault(pic, 0.0)
         visual_query_model[pic] = visual_query_model[pic] + ClickCounterTuppleToEmpiricalRelevance(ngramm, match_type, cliks_num, queries_num)
 
+def NGrammToNumOfNouns(ngramm):
+    if ngramm in ngramm_ngramm_to_num_of_nouns:
+        return ngramm_ngramm_to_num_of_nouns[ngramm]
+    num_of_nouns = 0 
+    for w in ngramm.split():
+        if w in lemmas_to_pos_tag:
+            if lemmas_to_pos_tag[w] in noun_like_unigramm_pos_tags:
+                num_of_nouns = num_of_nouns + 1
+        else:
+            lemmas_to_pos_tag[w] = nltk.pos_tag([w])[-1][-1]
+            if lemmas_to_pos_tag[w] in noun_like_unigramm_pos_tags:
+                num_of_nouns = num_of_nouns + 1
+    ngramm_ngramm_to_num_of_nouns[ngramm] = num_of_nouns
+    return ngramm_ngramm_to_num_of_nouns[ngramm]
+
 def CreateVisualModelForQuery(query):
     # trying to collect some how relevant pics from click_log_db  
     visual_query_model = {}
+    global lemmas_to_pos_tag
+    lemmas_to_pos_tag = {}
+    global ngramm_to_num_of_nouns
+    ngramm_to_num_of_nouns = {}
 
     query_lemmas = create_pickle_indexes.GetLemmas(query)
     normalized_query = create_pickle_indexes.QueryLemmasToNormalizedQuery(query_lemmas)
@@ -383,7 +403,7 @@ def CalcImageRelevance(query, image, request_img_id, rel_label):
     """ 
     return relevance
 
-if __name__ == '__main__':
+#if __name__ == '__main__':
     #print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.visual_words_save_to_file, str(datetime.datetime.now()))
     #global visual_words_index
     #visual_words_index = pickle.load(open(create_pickle_indexes.visual_words_save_to_file, "rb"))
@@ -405,6 +425,8 @@ if __name__ == '__main__':
     trigramm_index = pickle.load(open(create_pickle_indexes.trigramm_index_save_to_file))
         
     print >> sys.stderr, "Loading finished on %s" % str(datetime.datetime.now())
+
+if __name__ == '__main__':
         
     try:
         server = HTTPServer(('', PORT_NUMBER), MyHandler)
