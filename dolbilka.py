@@ -9,7 +9,7 @@ import httplib, urllib
 
 labeled_queries_file = "/Users/asayko/data/grand_challenge/Dev/DevSetLabel.tsv"
 images_file = "/Users/asayko/data/grand_challenge/Dev/DevSetImage.tsv"
-server_path = "localhost:47081"
+server_path = "localhost:8080"
 url_selector = "/imagerank"
 n_random_queries = 10
 n_random_pics = 10000
@@ -25,7 +25,7 @@ def LoadQueries(labeled_queries_file):
     return labeled_queries
 
 def GetRelevanceForQuery(query, img_id, img_base64, server_path, url_selector, rel_label):
-    params = urllib.urlencode({'runID': 0, 'query': query, 'image': img_base64, 'img_id': img_id, 'rel': rel_label})
+    params = urllib.urlencode({'runID': 0, 'query': query, 'image': img_base64, 'img_id': img_id, 'rel_label': rel_label})
     headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
     conn = httplib.HTTPConnection(server_path)
     print >> sys.stderr, "Requesting %s%s for query %s with img %s:%s..." % (server_path, url_selector, query, img_id, img_base64[:10])
