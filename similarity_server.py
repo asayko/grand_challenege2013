@@ -4,7 +4,7 @@ import numpy as np
 import nltk
 from nltk.corpus import wordnet as wn
 from nltk.corpus import stopwords
-import enchant
+#import enchant
 import codecs
 import itertools
 import collections
@@ -22,15 +22,17 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 
 import create_pickle_indexes
 
+"""
 enchant.set_param('enchant.myspell.dictionary.path',\
                    '/opt/local/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages/enchant/share/enchant/myspell/')
 dict_for_spellchecking = enchant.Dict("en_US")
+"""
 
 click_images_dir = "/Users/asayko/data/grand_challenge/Train/images_jpeg_renamed/"
 
-online_vis_words_extractor = subprocess.Popen('./online_vis_words_extractor', stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+#online_vis_words_extractor = subprocess.Popen('./online_vis_words_extractor', stdin = subprocess.PIPE, stdout = subprocess.PIPE)
 
-#external_relevance_calcer = subprocess.Popen(['./histextract', '-v', 'vocabs/vocab_l2_32768.dat', '-p', '-b', '-m', '10000', '-c', 'cache'],\
+#external_relevance_calcer = subprocess.Popen(['./histextract', '-v', 'vocabs/vocab_l2_32768.dat', '-c', 'cache_final.dat', '-b', '-m', '10000', '-p'],\
 #                                              stdin = subprocess.PIPE, stdout = subprocess.PIPE)
 
 logs_dir = "./logs/"
@@ -250,8 +252,9 @@ def AddPicCounters(visual_query_model, pic_counters, ngramm, match_type):
         visual_query_model[pic] = visual_query_model[pic] + ClickCounterTuppleToEmpiricalRelevance(ngramm, match_type, cliks_num, queries_num)
 
 def NGrammToNumOfNouns(ngramm):
-    if ngramm in ngramm_ngramm_to_num_of_nouns:
-        return ngramm_ngramm_to_num_of_nouns[ngramm]
+    if ngramm in ngramm_to_num_of_nouns:
+        return ngramm_to_num_of_nouns[ngramm]
+
     num_of_nouns = 0 
     for w in ngramm.split():
         if w in lemmas_to_pos_tag:
@@ -261,8 +264,8 @@ def NGrammToNumOfNouns(ngramm):
             lemmas_to_pos_tag[w] = nltk.pos_tag([w])[-1][-1]
             if lemmas_to_pos_tag[w] in noun_like_unigramm_pos_tags:
                 num_of_nouns = num_of_nouns + 1
-    ngramm_ngramm_to_num_of_nouns[ngramm] = num_of_nouns
-    return ngramm_ngramm_to_num_of_nouns[ngramm]
+    ngramm_to_num_of_nouns[ngramm] = num_of_nouns
+    return ngramm_to_num_of_nouns[ngramm]
 
 def CreateVisualModelForQuery(query):
     # trying to collect some how relevant pics from click_log_db  
@@ -371,43 +374,31 @@ def CalcExternalRelevance(model_file):
 
 def CalcImageRelevance(query, image, request_img_id, rel_label):
     
-    #image_bag_of_visual_words = ExtractVisualWords(image)
-    
+    print >> sys.stderr, "%s Creating visual model for query." % str(datetime.datetime.now())
     query_visual_model = CreateVisualModelForQuery(query)
     
+    """
     if len(query_visual_model) < MIN_POSSIBLE_VISUAL_MODEL_SIZE:
         query = SpellCheckingEnrich(query)
         query_visual_model = CreateVisualModelForQuery(out, query)
+    """
     
+    print >> sys.stderr, "%s Truncating visual model for query." % str(datetime.datetime.now())
     query_visual_model_trunkated = heapq.nlargest(min(ENOUGH_VISUAL_MODEL_SIZE, len(query_visual_model)),\
                                                   query_visual_model.items(), key = lambda x: x[1])
     
+    print >> sys.stderr, "%s Dumping visual model for query." % str(datetime.datetime.now())
     model_file = DumpVisualModel(query, image, query_visual_model_trunkated, request_img_id, rel_label)
     
+    print >> sys.stderr, "%s Invoking external relevance." % str(datetime.datetime.now())
     relevance = 0.0
     relevance = CalcExternalRelevance(model_file)
     
-    """
-    for clicked_pic in query_visual_model.keys():
-        clicked_pic_vis_words = visual_words_index[clicked_pic]
-        clicked_pic_vis_words_len = float(sum(clicked_pic_vis_words.values()))
-        
-        given_image_vis_words = collections.Counter(image_bag_of_visual_words)
-        given_image_vis_words_len = float(len(image_bag_of_visual_words))
-        
-        intersection_len = float(sum((given_image_vis_words & clicked_pic_vis_words).values()))
-        union_len = clicked_pic_vis_words_len + given_image_vis_words_len - intersection_len;
-        
-        if union_len != 0.0:
-            relevance = relevance + pow(20, intersection_len / union_len) - 1.0
-    """ 
+    print >> sys.stderr, "%s Processing finished." % str(datetime.datetime.now())
+    
     return relevance
 
-#if __name__ == '__main__':
-    #print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.visual_words_save_to_file, str(datetime.datetime.now()))
-    #global visual_words_index
-    #visual_words_index = pickle.load(open(create_pickle_indexes.visual_words_save_to_file, "rb"))
-
+if __name__ == '__main__':
     print >> sys.stderr, "Loading %s %s" % (create_pickle_indexes.query_index_save_to_file, str(datetime.datetime.now()))
     global query_index
     query_index = pickle.load(open(create_pickle_indexes.query_index_save_to_file, "rb"))
@@ -425,8 +416,6 @@ def CalcImageRelevance(query, image, request_img_id, rel_label):
     trigramm_index = pickle.load(open(create_pickle_indexes.trigramm_index_save_to_file))
         
     print >> sys.stderr, "Loading finished on %s" % str(datetime.datetime.now())
-
-if __name__ == '__main__':
         
     try:
         server = HTTPServer(('', PORT_NUMBER), MyHandler)
