@@ -73,21 +73,19 @@ Inverted index on the click log.
 More text.
 
 \section{Comparing given image with click-relevant images for the query.}
-We estimate image to text query similarity as average visual
-similarity score between query image and retrieved images.
-
-To calculate visual similarity score between images we use a standard bag-of-words
+To calculate visual similarity score between two images we use a standard bag-of-words
 framework \cite{Sivic03}, with images represented as L2 normalized histograms of
 visual words. We use rather small vocabulary consisted of 32768 visual
 words, trained from SIFT descriptors. If an L2 distance between
-histograms less less than a threshold we consider two images as a match . We consider features as matches if
+histograms less than a threshold we believe that two images have
+something in common. After that we consider features as matches if
 features assign to the same visual vocabulary cluster. We apply
 RANSAC-based geometric verification to find a maximal set of feature
 matches such that features in one image can be mapped to their
-corresponding features in the other by an similarity transformation.
+corresponding features in the other by a similarity transformation.
 We also tried more complicated transformations but did not recieve any
 profit. Matches which correspond to the best transformations are
-called inliers.
+called inliers. The number of inliers characterizes similarity of two images.
 
 We can describe final score as:
 
@@ -95,21 +93,15 @@ $$
     SimScore = 
 \begin{cases}
     0,& \text{if L2 dist} \geq thr\\
-    number of inliers / \sqrt(N1, N2),              & \text{otherwise}
+    I / \sqrt{N_1, N_2},              & \text{otherwise}
 \end{cases}
 $$
 
-Here, N1, N2 - number of descriptors in first and second image, consequently.
+Here, $N_1$ and $N_2$ are the number of descriptors on first and second images consequently.
 
-We use squery root normalization beacause some works\cite{jegou:inria-00602325} showed that it
+We use square root normalization beacause some works\cite{jegou:inria-00602325} showed that it
 outperforms standart normalization on the number of descriptors.
 
-
-Histogramm of visual words plus ransac for image comparasion.
-
-\subsection{A subsection}
-
-More text.
 
 \bibliographystyle{abbrv}
 \bibliography{bib.bib}
