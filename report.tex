@@ -62,15 +62,21 @@
 \begin{document}
 \maketitle
 
-\abstract{In the report we present a baseline approach for solving the problem which was set within the second MSR-Bing Challenge on Image Retrieval \cite{GrandChallengeSite}. Our goal is to present a simple method to estimate image's relevance to the given search query based on similarity matching with pictures that were clicked on alike search queries. The relevance }
+\abstract{In the report we present a baseline approach for solving the problem which was set within the second MSR-Bing Challenge on Image Retrieval \cite{GrandChallengeSite}. Our goal is to present a simple method to calculate image's relevance to the given search query based on similarity matching with pictures from click log. The relevance is estimated in two stages. Within the first stage we fetch from the click log images that  were clicked on alike search queries. Within the second stage we calculate the cumulative similarity of given image to the fetched pictures. The cumulative similarity is then returned as requested image relevance.}
 
 \section{Extracting click-relevant images from the  click log for a query.}
 
-Inverted index on the click log.
+Our purpose at the first stage is to mine from the click log pictures that we could possibly use as relevant examples to the given search query. In order to find such images we build four mappings. The first index maps normalized search queries from the click log to the images that were clicked on the normalized query. We also save total number of clicks in the index to be able to take top most clicked on the query pictures. For normalization we lematize the words of the query delete stop words and sort the rest lexicographically. We exploit lematization from the NLTK framework \cite{NLTKSite}.
 
-\subsection{A subsection}
+The second index maps query lemmas to pictures that were clicked on the queries containing the lemmas. In the index we also save the cumulative number of clicks and the number of different queries on which the picture was clicked. The numbers are needed to fetch top relevant images for a lemma, where relevance is estimated using heuristic rules.
 
-More text.
+The third and the fourth indicies are alike with the first one but they store bigramms and respectively trigramms that are found in the click log. By ngramm we mean sorted tuple of lemmas contained in the search query.
+
+\subsection{Search query processing.}
+
+The search query is processed the following way. At first we normalize the query. For each query lemma we generate a set of synsets\cite{NLTKSite}. Then we create all possible bigramms and trigramms building all combinations of elements from different sets. After that we try to retrieve 100 images from the four indecies into "top 100 related pics" list. At first we retrieve top 100 most clicked images from index build upon normalized queries. If there are less than 100 clicked images we try to fetch lacking pictures from other indecies using following heuristical rule. For each generated from search query ngramm fetch all clicked images from the ngramm indecies. For each  of the extracted images estimate the click relevance. The estimated click relevance of a picture is the sum over all extraction cases(that are caused by machted ngramms) of products of the number of different queries containing the ngramm the image was clicked on with the logarithm of the total number of clicks the picture got on queries containing the ngramm and number of noun-like lemmas in the ngramm and the ngramm match type coeficient, where ngramm match type coeficients are empirically tuned. Sort the retrieved images by decrease of estimated click relevance. Try  to complete the "top 100 related pics" list up to 100 images with the top images from the retrieved list.
+
+The proposed heuristical approach enables to fetch visually consistent lists of  pictures for considerable part of search queries from the provided test set, which could be possibly used for traing query specific classifyers.  As a proof of the concept we used the list as relevant examples and estimated requested relevance of the given picture as sum of visual simmilarities with retrieved images.
 
 \section{Comparing given image with click-relevant images for the query.}
 To calculate visual similarity score between two images we use a standard bag-of-words
@@ -105,10 +111,5 @@ outperforms standart normalization on the number of descriptors.
 
 \bibliographystyle{abbrv}
 \bibliography{bib.bib}
-%\begin{thebibliography}{widest entry}
-%\bibitem{GrandChallengeSite} GrandChallengeSite
-%\bibitem{cite_key2} 
-
-%\end{thebibliography}
 
 \end{document}
