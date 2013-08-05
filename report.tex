@@ -73,15 +73,38 @@ More text.
 
 \section{Comparing given image with click-relevant images for the query.}
 
+We estimate image to text query similarity as weighted average visual
+similarity score between query image and retrieved images. {insert formula, insert weight description}
+
+To calculate visual similarity score between images we use a standard bag-of-words
+framework \cite{Sivic03}, with images represented as L2 normalized histograms of
+visual words. We use rather small vocabulary consisted of 32768 visual
+words, trained from SIFT descriptors. If the L2 distance between
+histograms less than a threshold, then we perform RANSAC-based
+geometric verification. And the final score between two images is:
+
+score = 
+if L2 distance > thr:
+   return 0;
+else 
+ return inliers / sqrt(N1, N2)
+
+We use srn normalization beacause some works\cite{jegou:inria-00602325} showed that it
+outperforms standart normalization on the number of descriptors.
+
+
 Histogramm of visual words plus ransac for image comparasion.
 
 \subsection{A subsection}
 
 More text.
 
-\begin{thebibliography}{widest entry}
-\bibitem{GrandChallengeSite} GrandChallengeSite
-\bibitem{cite_key2} bibliographic information
-\end{thebibliography}
+\bibliographystyle{abbrv}
+\bibliography{bib.bib}
+%\begin{thebibliography}{widest entry}
+%\bibitem{GrandChallengeSite} GrandChallengeSite
+%\bibitem{cite_key2} 
+
+%\end{thebibliography}
 
 \end{document}
