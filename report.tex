@@ -24,6 +24,7 @@
 % \usepackage[parfill]{parskip} % Activate to begin paragraphs with an empty line rather than an indent
 
 %%% PACKAGES
+\usepackage{amsmath}
 \usepackage{booktabs} % for much better looking tables
 \usepackage{array} % for better arrays (eg matrices) in maths
 \usepackage{paralist} % very flexible & customisable lists (eg. enumerate/itemize, etc.)
@@ -72,24 +73,35 @@ Inverted index on the click log.
 More text.
 
 \section{Comparing given image with click-relevant images for the query.}
-
-We estimate image to text query similarity as weighted average visual
-similarity score between query image and retrieved images. {insert formula, insert weight description}
+We estimate image to text query similarity as average visual
+similarity score between query image and retrieved images.
 
 To calculate visual similarity score between images we use a standard bag-of-words
 framework \cite{Sivic03}, with images represented as L2 normalized histograms of
 visual words. We use rather small vocabulary consisted of 32768 visual
-words, trained from SIFT descriptors. If the L2 distance between
-histograms less than a threshold, then we perform RANSAC-based
-geometric verification. And the final score between two images is:
+words, trained from SIFT descriptors. If an L2 distance between
+histograms less less than a threshold we consider two images as a match . We consider features as matches if
+features assign to the same visual vocabulary cluster. We apply
+RANSAC-based geometric verification to find a maximal set of feature
+matches such that features in one image can be mapped to their
+corresponding features in the other by an similarity transformation.
+We also tried more complicated transformations but did not recieve any
+profit. Matches which correspond to the best transformations are
+called inliers.
 
-score = 
-if L2 distance > thr:
-   return 0;
-else 
- return inliers / sqrt(N1, N2)
+We can describe final score as:
 
-We use srn normalization beacause some works\cite{jegou:inria-00602325} showed that it
+$$
+    SimScore = 
+\begin{cases}
+    0,& \text{if L2 dist} \geq thr\\
+    number of inliers / \sqrt(N1, N2),              & \text{otherwise}
+\end{cases}
+$$
+
+Here, N1, N2 - number of descriptors in first and second image, consequently.
+
+We use squery root normalization beacause some works\cite{jegou:inria-00602325} showed that it
 outperforms standart normalization on the number of descriptors.
 
 
