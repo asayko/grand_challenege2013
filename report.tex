@@ -76,37 +76,37 @@ The third and the fourth indicies are alike with the first one but they store bi
 
 The search query is processed the following way. At first we normalize the query. For each query lemma we generate a set of synsets\cite{NLTKSite}. Then we create all possible bigramms and trigramms building all combinations of elements from different sets. After that we try to retrieve 100 images from the four indecies into "top 100 related pics" list. At first we retrieve top 100 most clicked images from index build upon normalized queries. If there are less than 100 clicked images we try to fetch lacking pictures from other indecies using following heuristical rule. For each generated from search query ngramm fetch all clicked images from the ngramm indecies. For each  of the extracted images estimate the click relevance. The estimated click relevance of a picture is the sum over all extraction cases(that are caused by machted ngramms) of products of the number of different queries containing the ngramm the image was clicked on with the logarithm of the total number of clicks the picture got on queries containing the ngramm and number of noun-like lemmas in the ngramm and the ngramm match type coeficient, where ngramm match type coeficients are empirically tuned. Sort the retrieved images by decrease of estimated click relevance. Try  to complete the "top 100 related pics" list up to 100 images with the top images from the retrieved list.
 
-The proposed heuristical approach enables to fetch visually consistent lists of  pictures for considerable part of search queries from the provided test set, which could be possibly used for traing query specific classifyers.  As a proof of the concept we used the list as relevant examples and estimated requested relevance of the given picture as sum of visual simmilarities with retrieved images.
+The proposed heuristical approach enables to fetch visually consistent lists of  pictures for considerable part of search queries from the provided test set, which could be possibly used for training query specific classifyers.  As a proof of the concept we used the list as relevant examples and estimated requested relevance of the given picture as sum of visual similarities with retrieved images.
 
 \section{Comparing given image with click-relevant images for the query.}
 To calculate visual similarity score between two images we use a standard bag-of-words
 framework \cite{Sivic03}, with images represented as L2 normalized histograms of
 visual words. We use rather small vocabulary consisted of 32768 visual
-words, trained from SIFT descriptors. If an L2 distance between
+words, trained from SIFT\cite{Lowe:2004} descriptors. If an L2 distance between
 histograms less than a threshold we believe that two images have
 something in common. After that we consider features as matches if
 features assign to the same visual vocabulary cluster. We apply
 RANSAC-based geometric verification to find a maximal set of feature
 matches such that features in one image can be mapped to their
 corresponding features in the other by a similarity transformation.
-We also tried more complicated transformations but did not recieve any
+We also tried more complicated transformations but did not receive any
 profit. Matches which correspond to the best transformations are
 called inliers. The number of inliers characterizes similarity of two images.
 
-We can describe final score as:
+We can describe the final score S as follows:
 
 $$
-    SimScore = 
+    S = 
 \begin{cases}
-    0,& \text{if L2 dist} \geq thr\\
+    0,& \text{if L2 hist dist} > thr\\
     I / \sqrt{N_1, N_2},              & \text{otherwise}
 \end{cases}
 $$
+where I is the number of inliers, $N_1$ and $N_2$ are the number of
+descriptors on the first and the second image consequently.
 
-Here, $N_1$ and $N_2$ are the number of descriptors on first and second images consequently.
-
-We use square root normalization beacause some works\cite{jegou:inria-00602325} showed that it
-outperforms standart normalization on the number of descriptors.
+We use square root normalization because some works\cite{jegou:inria-00602325} showed that it
+outperforms standard normalization on the number of descriptors.
 
 
 \bibliographystyle{abbrv}
