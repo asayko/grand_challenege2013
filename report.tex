@@ -79,6 +79,26 @@ The proposed heuristical approach enables to fetch visually consistent lists of 
 
 \section{Comparing given image with click-relevant images for the query.}
 
+We estimate image to text query similarity as weighted average visual
+similarity score between query image and retrieved images. {insert formula, insert weight description}
+
+To calculate visual similarity score between images we use a standard bag-of-words
+framework \cite{Sivic03}, with images represented as L2 normalized histograms of
+visual words. We use rather small vocabulary consisted of 32768 visual
+words, trained from SIFT descriptors. If the L2 distance between
+histograms less than a threshold, then we perform RANSAC-based
+geometric verification. And the final score between two images is:
+
+score = 
+if L2 distance > thr:
+   return 0;
+else 
+ return inliers / sqrt(N1, N2)
+
+We use srn normalization beacause some works\cite{jegou:inria-00602325} showed that it
+outperforms standart normalization on the number of descriptors.
+
+
 Histogramm of visual words plus ransac for image comparasion.
 
 \subsection{A subsection}
@@ -87,9 +107,7 @@ Histogramm of visual words plus ransac for image comparasion.
 
 More text.
 
-\begin{thebibliography}{widest entry}
-\bibitem{GrandChallengeSite} GrandChallengeSite
-\bibitem{NLTKSite} NLTKSite
-\end{thebibliography}
+\bibliographystyle{abbrv}
+\bibliography{bib.bib}
 
 \end{document}
